@@ -1,0 +1,38 @@
+# yaml-language-server: $schema=https://aka.ms/configuration-dsc-schema/0.2
+
+properties:
+  resources:
+    
+    - resource: Microsoft.WinGet.DSC/WinGetPackage
+      directives:
+        description: Rancher Desktop
+        allowPrerelease: true
+      settings:
+        id: suse.RancherDesktop
+        source: winget
+
+    - resource: Microsoft.WinGet.DSC/WinGetPackage
+      directives:
+        description: VSCode
+        allowPrerelease: true
+      settings:
+        id: Microsoft.VisualStudioCode
+        source: winget
+
+    - resource: Microsoft.WinGet.DSC/WinGetPackage
+      directives:
+        description: Azure CLI
+        allowPrerelease: true
+      settings:
+        id: Microsoft.AzureCLI
+        source: winget
+
+    - resource: Microsoft.WinGet.DSC/WinGetPackage
+      directives:
+        description: Python (SNEKS!)
+        allowPrerelease: true
+      settings:
+        id: Python.Python.3.12
+        source: winget
+        
+  configurationVersion: 0.2.0

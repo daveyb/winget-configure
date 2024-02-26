@@ -1,0 +1,37 @@
+# yaml-language-server: $schema=https://aka.ms/configuration-dsc-schema/0.2
+
+properties:
+  resources:
+    - resource: Microsoft.WinGet.DSC/WinGetPackage
+      directives:
+        description: Install Pocket Casts Desktop
+        allowPrerelease: true
+      settings:
+        id: 9PCDBQX582BZ
+        source: msstore
+
+    - resource: Microsoft.WinGet.DSC/WinGetPackage
+      directives:
+        description: Zoom
+        allowPrerelease: true
+      settings:
+        id: Zoom.Zoom
+        source: winget
+
+    - resource: Microsoft.WinGet.DSC/WinGetPackage
+      directives:
+        description: Slack
+        allowPrerelease: true
+      settings:
+        id: SlackTechnologies.Slack
+        source: winget
+
+    - resource: Microsoft.WinGet.DSC/WinGetPackage
+      directives:
+        description: Oh-my-posh shell module for Microsoft Terminal
+        allowPrerelease: true
+      settings:
+        id: JanDeDobbeleer.OhMyPosh
+        source: winget
+        
+  configurationVersion: 0.2.0

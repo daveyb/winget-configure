@@ -1,0 +1,34 @@
+# yaml-language-server: $schema=https://aka.ms/configuration-dsc-schema/0.2
+
+properties:
+
+  resources:
+    - resource: Microsoft.WinGet.DSC/WinGetPackage
+      directives:
+        description: Install latest release of Git
+        allowPrerelease: true
+      settings:
+        id: Git.Git
+        source: winget
+
+    - resource: Microsoft.WinGet.DSC/WinGetPackage
+      directives:
+        description: Install GitHub CLI
+        allowPrerelease: true
+      settings:
+        id: GitHub.cli
+        source: winget
+
+    - resource: Microsoft.PowerShell.DSC/File
+      directives:
+        description: Initialize .gitconfig file
+      settings:
+        ensure: Present
+        destinationPath: $env:USERPROFILE\.gitconfig
+        contents: |
+          [credential]
+            helper = manager
+            useHttpPath = true
+          
+
+  configurationVersion: 0.2.0

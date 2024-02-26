@@ -1,0 +1,102 @@
+# yaml-language-server: $schema=https://aka.ms/configuration-dsc-schema/0.2
+
+properties:
+  resources:
+
+    - resource: Microsoft.WinGet.DSC/WinGetPackage
+      directives:
+        description: Dropbox
+        allowPrerelease: true
+      settings:
+        id: Dropbox.Dropbox
+        source: winget
+
+    - resource: Microsoft.WinGet.DSC/WinGetPackage
+      directives:
+        description: Calibre
+        allowPrerelease: true
+      settings:
+        id: Calibre.Calibre
+        source: winget
+
+    - resource: Microsoft.WinGet.DSC/WinGetPackage
+      directives:
+        description: ProtonVPN
+        allowPrerelease: true
+      settings:
+        id: ProtonTechnologies.ProtonVPN
+        source: winget
+
+    - resource: Microsoft.WinGet.DSC/WinGetPackage
+      directives:
+        description: Plex
+        allowPrerelease: true
+      settings:
+        id: Plex.Plex
+        source: winget
+
+    - resource: Microsoft.WinGet.DSC/WinGetPackage
+      directives:
+        description: Handbrake
+        allowPrerelease: true
+      settings:
+        id: Handbrake.Handbrake
+        source: winget
+
+    - resource: Microsoft.WinGet.DSC/WinGetPackage
+      directives:
+        description: Android Studio
+        allowPrerelease: true
+      settings:
+        id: Google.AndroidStudio
+        source: winget
+
+    - resource: Microsoft.WinGet.DSC/WinGetPackage
+      directives:
+        description: Steam
+        allowPrerelease: true
+      settings:
+        id: Valve.Steam
+        source: winget
+
+    - resource: Microsoft.WinGet.DSC/WinGetPackage
+      directives:
+        description: The Gimp
+        allowPrerelease: true
+      settings:
+        id: GIMP.GIMP
+        source: winget
+
+    - resource: Microsoft.WinGet.DSC/WinGetPackage
+      directives:
+        description: Inkscape
+        allowPrerelease: true
+      settings:
+        id: Inkscape.Inkscape
+        source: winget
+
+    - resource: Microsoft.WinGet.DSC/WinGetPackage
+      directives:
+        description: Discord
+        allowPrerelease: true
+      settings:
+        id: Discord.Discord
+        source: winget
+
+    - resource: Microsoft.WinGet.DSC/WinGetPackage
+      directives:
+        description: Quicken
+        allowPrerelease: true
+      settings:
+        id: Quicken.Quicken
+        source: winget
+     
+    - resource: Microsoft.WinGet.DSC/WinGetPackage
+      directives:
+        description: Signal
+        allowPrerelease: true
+      settings:
+        id: OpenWhisperSystems.Signal
+        source: winget
+        
+  configurationVersion: 0.2.0
