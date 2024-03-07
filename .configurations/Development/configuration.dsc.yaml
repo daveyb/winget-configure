@@ -13,6 +13,14 @@ properties:
 
     - resource: Microsoft.WinGet.DSC/WinGetPackage
       directives:
+        description: vim
+        allowPrerelease: true
+      settings:
+        id: vim.vim
+        source: winget
+
+    - resource: Microsoft.WinGet.DSC/WinGetPackage
+      directives:
         description: VSCode
         allowPrerelease: true
       settings:
@@ -33,6 +41,30 @@ properties:
         allowPrerelease: true
       settings:
         id: Python.Python.3.12
+        source: 
+        
+    - resource: Microsoft.WinGet.DSC/WinGetPackage
+      directives:
+        description: golang
+        allowPrerelease: true
+      settings:
+        id: GoLang.Go
+        source: winget
+
+    - resource: Microsoft.WinGet.DSC/WinGetPackage
+      directives:
+        description: Terraform
+        allowPrerelease: true
+      settings:
+        id: HashiCorp.Terraform
+        source: winget
+
+    - resource: Microsoft.WinGet.DSC/WinGetPackage
+      directives:
+        description: Vault
+        allowPrerelease: true
+      settings:
+        id: HashiCorp.Vault
         source: winget
         
   configurationVersion: 0.2.0
