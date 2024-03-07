@@ -98,5 +98,13 @@ properties:
       settings:
         id: OpenWhisperSystems.Signal
         source: winget
+
+    - resource: Microsoft.WinGet.DSC/WinGetPackage
+      directives:
+        description: LibreOffice LTS
+        allowPrerelease: true
+      settings:
+        id: TheDocumentFoundation.LibreOffice.LTS
+        source: winget
         
   configurationVersion: 0.2.0
