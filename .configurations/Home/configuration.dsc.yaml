@@ -13,6 +13,14 @@ properties:
 
     - resource: Microsoft.WinGet.DSC/WinGetPackage
       directives:
+        description: Dropbox
+        allowPrerelease: true
+      settings:
+        id: Dropbox.Dash
+        source: winget
+
+    - resource: Microsoft.WinGet.DSC/WinGetPackage
+      directives:
         description: Calibre
         allowPrerelease: true
       settings:
