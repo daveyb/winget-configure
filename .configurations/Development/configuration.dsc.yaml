@@ -66,5 +66,37 @@ properties:
       settings:
         id: HashiCorp.Vault
         source: winget
+
+    - resource: Microsoft.WinGet.DSC/WinGetPackage
+      directives:
+        description: k9s
+        allowPrerelease: true
+      settings:
+        id: Derailed.k9s
+        source: winget
+
+    - resource: Microsoft.WinGet.DSC/WinGetPackage
+      directives:
+        description: kubectl
+        allowPrerelease: true
+      settings:
+        id: Kubernetes.kubectl
+        source: 
+        
+    - resource: Microsoft.WinGet.DSC/WinGetPackage
+      directives:
+        description: kubectx
+        allowPrerelease: true
+      settings:
+        id: ahmetb.kubectx
+        source: winget
+
+    - resource: Microsoft.WinGet.DSC/WinGetPackage
+      directives:
+        description: kubens
+        allowPrerelease: true
+      settings:
+        id: ahmetb.kubens
+        source: winget
         
   configurationVersion: 0.2.0
