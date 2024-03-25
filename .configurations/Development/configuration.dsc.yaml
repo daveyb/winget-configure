@@ -81,7 +81,7 @@ properties:
         allowPrerelease: true
       settings:
         id: Kubernetes.kubectl
-        source: 
+        source: wingetwing
         
     - resource: Microsoft.WinGet.DSC/WinGetPackage
       directives:
@@ -97,6 +97,14 @@ properties:
         allowPrerelease: true
       settings:
         id: ahmetb.kubens
+        source: winget
+
+    - resource: Microsoft.WinGet.DSC/WinGetPackage
+      directives:
+        description: Visual Studio Community
+        allowPrerelease: true
+      settings:
+        id: Microsoft.VisualStudio.2022.Community
         source: winget
         
   configurationVersion: 0.2.0
