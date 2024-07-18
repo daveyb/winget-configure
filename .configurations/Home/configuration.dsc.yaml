@@ -5,42 +5,10 @@ properties:
 
     - resource: Microsoft.WinGet.DSC/WinGetPackage
       directives:
-        description: Dropbox
-        allowPrerelease: true
-      settings:
-        id: Dropbox.Dropbox
-        source: winget
-
-    - resource: Microsoft.WinGet.DSC/WinGetPackage
-      directives:
-        description: Dropbox
-        allowPrerelease: true
-      settings:
-        id: Dropbox.Dash
-        source: winget
-
-    - resource: Microsoft.WinGet.DSC/WinGetPackage
-      directives:
         description: Calibre
         allowPrerelease: true
       settings:
         id: Calibre.Calibre
-        source: winget
-
-    - resource: Microsoft.WinGet.DSC/WinGetPackage
-      directives:
-        description: ProtonVPN
-        allowPrerelease: true
-      settings:
-        id: ProtonTechnologies.ProtonVPN
-        source: winget
-
-    - resource: Microsoft.WinGet.DSC/WinGetPackage
-      directives:
-        description: Plex
-        allowPrerelease: true
-      settings:
-        id: Plex.Plex
         source: winget
 
     - resource: Microsoft.WinGet.DSC/WinGetPackage

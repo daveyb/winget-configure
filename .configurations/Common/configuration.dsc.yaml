@@ -34,4 +34,12 @@ properties:
         id: JanDeDobbeleer.OhMyPosh
         source: winget
         
+    - resource: Microsoft.WinGet.DSC/WinGetPackage
+      directives:
+        description: Obsidian
+        allowPrerelease: true
+      settings:
+        id: Obsidian.Obsidian
+        source: winget
+        
   configurationVersion: 0.2.0
