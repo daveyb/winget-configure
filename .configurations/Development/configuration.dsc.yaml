@@ -107,4 +107,12 @@ properties:
         id: Microsoft.VisualStudio.2022.Community
         source: winget
         
+    - resource: Microsoft.WinGet.DSC/WinGetPackage
+      directives:
+        description: Ubuntu 24.04 LTS WSL
+        allowPrerelease: true
+      settings:
+        id: 9NZ3KLHXDJP5
+        source: msstore
+        
   configurationVersion: 0.2.0

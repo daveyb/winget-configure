@@ -106,5 +106,21 @@ properties:
       settings:
         id: Proton.ProtonVPN
         source: winget      
-    
+             
+    - resource: Microsoft.WinGet.DSC/WinGetPackage
+      directives:
+        description: Mozilla Thunderbird
+        allowPrerelease: true
+      settings:
+        id: Mozilla.Thunderbird
+        source: winget
+                     
+    - resource: Microsoft.WinGet.DSC/WinGetPackage
+      directives:
+        description: Mozilla Firefox
+        allowPrerelease: true
+      settings:
+        id: Mozilla.Firefox
+        source: winget  
+
   configurationVersion: 0.2.0
