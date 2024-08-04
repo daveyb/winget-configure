@@ -74,5 +74,37 @@ properties:
       settings:
         id: TheDocumentFoundation.LibreOffice.LTS
         source: winget
-        
+    
+    - resource: Microsoft.WinGet.DSC/WinGetPackage
+      directives:
+        description: Proton Drive
+        allowPrerelease: true
+      settings:
+        id: Proton.ProtonDrive
+        source: winget
+    
+    - resource: Microsoft.WinGet.DSC/WinGetPackage
+      directives:
+        description: Proton Mail Bridge
+        allowPrerelease: true
+      settings:
+        id: Proton.ProtonMailBridge
+        source: winget
+     
+    - resource: Microsoft.WinGet.DSC/WinGetPackage
+      directives:
+        description: Proton Pass
+        allowPrerelease: true
+      settings:
+        id: Proton.ProtonPass
+        source: winget
+            
+    - resource: Microsoft.WinGet.DSC/WinGetPackage
+      directives:
+        description: Proton VPN
+        allowPrerelease: true
+      settings:
+        id: Proton.ProtonVPN
+        source: winget      
+    
   configurationVersion: 0.2.0
