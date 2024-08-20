@@ -36,10 +36,10 @@ properties:
         
     - resource: Microsoft.WinGet.DSC/WinGetPackage
       directives:
-        description: Obsidian
+        description: MSEdgeRedirect
         allowPrerelease: true
       settings:
-        id: Obsidian.Obsidian
+        id: rcmaehl.MSEdgeRedirect
         source: winget
         
   configurationVersion: 0.2.0
