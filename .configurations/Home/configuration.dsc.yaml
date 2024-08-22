@@ -37,14 +37,6 @@ properties:
 
     - resource: Microsoft.WinGet.DSC/WinGetPackage
       directives:
-        description: Inkscape
-        allowPrerelease: true
-      settings:
-        id: Inkscape.Inkscape
-        source: winget
-
-    - resource: Microsoft.WinGet.DSC/WinGetPackage
-      directives:
         description: Discord
         allowPrerelease: true
       settings:
@@ -65,14 +57,6 @@ properties:
         allowPrerelease: true
       settings:
         id: OpenWhisperSystems.Signal
-        source: winget
-
-    - resource: Microsoft.WinGet.DSC/WinGetPackage
-      directives:
-        description: LibreOffice LTS
-        allowPrerelease: true
-      settings:
-        id: TheDocumentFoundation.LibreOffice.LTS
         source: winget
     
     - resource: Microsoft.WinGet.DSC/WinGetPackage
@@ -106,13 +90,13 @@ properties:
       settings:
         id: Proton.ProtonVPN
         source: winget      
-             
+    
     - resource: Microsoft.WinGet.DSC/WinGetPackage
       directives:
-        description: Mozilla Thunderbird
+        description: Slack
         allowPrerelease: true
       settings:
-        id: Mozilla.Thunderbird
+        id: SlackTechnologies.Slack
         source: winget
                      
     - resource: Microsoft.WinGet.DSC/WinGetPackage
@@ -121,6 +105,22 @@ properties:
         allowPrerelease: true
       settings:
         id: Mozilla.Firefox
-        source: winget  
+        source: winget 
+
+    - resource: Microsoft.WinGet.DSC/WinGetPackage
+      directives:
+        description: Freda ePub Reader
+        allowPrerelease: true
+      settings:
+        id: 9WZDNCRFJ43B
+        source: msstore
+
+    - resource: Microsoft.WinGet.DSC/WinGetPackage
+      directives:
+        description: WorkAtNight - Brightness Below Minimum
+        allowPrerelease: true
+      settings:
+        id: 9PL6P6ZHL1L7
+        source: msstore
 
   configurationVersion: 0.2.0
