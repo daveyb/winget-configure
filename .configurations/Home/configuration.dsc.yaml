@@ -5,34 +5,10 @@ properties:
 
     - resource: Microsoft.WinGet.DSC/WinGetPackage
       directives:
-        description: Handbrake
-        allowPrerelease: true
-      settings:
-        id: Handbrake.Handbrake
-        source: winget
-
-    - resource: Microsoft.WinGet.DSC/WinGetPackage
-      directives:
-        description: Android Studio
-        allowPrerelease: true
-      settings:
-        id: Google.AndroidStudio
-        source: winget
-
-    - resource: Microsoft.WinGet.DSC/WinGetPackage
-      directives:
         description: Steam
         allowPrerelease: true
       settings:
         id: Valve.Steam
-        source: winget
-
-    - resource: Microsoft.WinGet.DSC/WinGetPackage
-      directives:
-        description: The Gimp
-        allowPrerelease: true
-      settings:
-        id: GIMP.GIMP
         source: winget
 
     - resource: Microsoft.WinGet.DSC/WinGetPackage
@@ -98,14 +74,6 @@ properties:
       settings:
         id: SlackTechnologies.Slack
         source: winget
-                     
-    - resource: Microsoft.WinGet.DSC/WinGetPackage
-      directives:
-        description: Mozilla Firefox
-        allowPrerelease: true
-      settings:
-        id: Mozilla.Firefox
-        source: winget 
 
     - resource: Microsoft.WinGet.DSC/WinGetPackage
       directives:

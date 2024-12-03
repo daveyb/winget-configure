@@ -40,7 +40,7 @@ properties:
         description: Python (SNEKS!)
         allowPrerelease: true
       settings:
-        id: Python.Python.3.12
+        id: Python.Python.3.13
         source: 
         
     - resource: Microsoft.WinGet.DSC/WinGetPackage
@@ -69,6 +69,22 @@ properties:
 
     - resource: Microsoft.WinGet.DSC/WinGetPackage
       directives:
+        description: Packer
+        allowPrerelease: true
+      settings:
+        id: HashiCorp.Packer
+        source: winget
+        
+    - resource: Microsoft.WinGet.DSC/WinGetPackage
+      directives:
+        description: Consul
+        allowPrerelease: true
+      settings:
+        id: HashiCorp.Consul
+        source: winget
+
+    - resource: Microsoft.WinGet.DSC/WinGetPackage
+      directives:
         description: k9s
         allowPrerelease: true
       settings:
@@ -81,7 +97,7 @@ properties:
         allowPrerelease: true
       settings:
         id: Kubernetes.kubectl
-        source: wingetwing
+        source: winget
         
     - resource: Microsoft.WinGet.DSC/WinGetPackage
       directives:
@@ -114,29 +130,5 @@ properties:
       settings:
         id: 9NZ3KLHXDJP5
         source: msstore
-
-    - resource: Microsoft.WinGet.DSC/WinGetPackage
-      directives:
-        description: Podman
-        allowPrerelease: true
-      settings:
-        id: RedHat.Podman
-        source: winget
-
-    - resource: Microsoft.WinGet.DSC/WinGetPackage
-      directives:
-        description: Podman Desktop
-        allowPrerelease: true
-      settings:
-        id: RedHat.Podman-Desktop
-        source: winget
-  
-    - resource: Microsoft.WinGet.DSC/WinGetPackage
-      directives:
-        description: kind
-        allowPrerelease: true
-      settings:
-        id: Kubernetes.kind
-        source: winget
         
   configurationVersion: 0.2.0
