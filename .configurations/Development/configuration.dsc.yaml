@@ -85,6 +85,14 @@ properties:
 
     - resource: Microsoft.WinGet.DSC/WinGetPackage
       directives:
+        description: Ruby
+        allowPrerelease: true
+      settings:
+        id: RubyInstallerTeam.Ruby.3.2
+        source: winget
+
+    - resource: Microsoft.WinGet.DSC/WinGetPackage
+      directives:
         description: k9s
         allowPrerelease: true
       settings:
