@@ -88,7 +88,15 @@ properties:
         description: Ruby
         allowPrerelease: true
       settings:
-        id: RubyInstallerTeam.Ruby.3.2
+        id: RubyInstallerTeam.RubyWithDevKit.3.2
+        source: winget
+
+    - resource: Microsoft.WinGet.DSC/WinGetPackage
+      directives:
+        description: SQLite
+        allowPrerelease: true
+      settings:
+        id: SQLite.SQLite
         source: winget
 
     - resource: Microsoft.WinGet.DSC/WinGetPackage
