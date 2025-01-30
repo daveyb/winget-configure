@@ -21,14 +21,6 @@ properties:
 
     - resource: Microsoft.WinGet.DSC/WinGetPackage
       directives:
-        description: VSCode
-        allowPrerelease: true
-      settings:
-        id: Microsoft.VisualStudioCode
-        source: winget
-
-    - resource: Microsoft.WinGet.DSC/WinGetPackage
-      directives:
         description: Azure CLI
         allowPrerelease: true
       settings:
@@ -41,7 +33,7 @@ properties:
         allowPrerelease: true
       settings:
         id: Python.Python.3.13
-        source: 
+        source: winget
         
     - resource: Microsoft.WinGet.DSC/WinGetPackage
       directives:
@@ -130,14 +122,6 @@ properties:
       settings:
         id: ahmetb.kubens
         source: winget
-
-    - resource: Microsoft.WinGet.DSC/WinGetPackage
-      directives:
-        description: Visual Studio Community
-        allowPrerelease: true
-      settings:
-        id: Microsoft.VisualStudio.2022.Community
-        source: winget
         
     - resource: Microsoft.WinGet.DSC/WinGetPackage
       directives:
@@ -146,5 +130,13 @@ properties:
       settings:
         id: 9NZ3KLHXDJP5
         source: msstore
+
+    - resource: Microsoft.WinGet.DSC/WinGetPackage
+      directives:
+        description: Incus Client
+        allowPrerelease: true
+      settings:
+        id: LinuxContainers.Incus
+        source: winget
         
   configurationVersion: 0.2.0
