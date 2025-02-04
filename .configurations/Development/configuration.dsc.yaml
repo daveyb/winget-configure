@@ -138,5 +138,13 @@ properties:
       settings:
         id: LinuxContainers.Incus
         source: winget
+
+    - resource: Microsoft.WinGet.DSC/WinGetPackage
+      directives:
+        description: Virt-Viewer (for Incus VGA console)
+        allowPrerelease: true
+      settings:
+        id: RedHat.VirtViewer
+        source: winget
         
   configurationVersion: 0.2.0
