@@ -73,5 +73,29 @@ properties:
       settings:
         id: Microsoft.VisualStudioCode
         source: winget
+
+    - resource: Microsoft.WinGet.DSC/WinGetPackage
+      directives:
+        description: VSCode
+        allowPrerelease: true
+      settings:
+        id: Microsoft.VisualStudioCode.Insiders
+        source: winget
+
+    - resource: Microsoft.WinGet.DSC/WinGetPackage
+      directives:
+        description: PowerToys
+        allowPrerelease: true
+      settings:
+        id: Microsoft.PowerToys
+        source: winget
+
+    - resource: Microsoft.WinGet.DSC/WinGetPackage
+      directives:
+        description: Sysinternals Suite (Better version of task manager)
+        allowPrerelease: true
+      settings:
+        id: Microsoft.Sysinternals
+        source: winget
         
   configurationVersion: 0.2.0

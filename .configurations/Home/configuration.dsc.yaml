@@ -5,26 +5,10 @@ properties:
 
     - resource: Microsoft.WinGet.DSC/WinGetPackage
       directives:
-        description: Steam
-        allowPrerelease: true
-      settings:
-        id: Valve.Steam
-        source: winget
-
-    - resource: Microsoft.WinGet.DSC/WinGetPackage
-      directives:
         description: Discord
         allowPrerelease: true
       settings:
         id: Discord.Discord
-        source: winget
-
-    - resource: Microsoft.WinGet.DSC/WinGetPackage
-      directives:
-        description: Quicken
-        allowPrerelease: true
-      settings:
-        id: Quicken.Quicken
         source: winget
      
     - resource: Microsoft.WinGet.DSC/WinGetPackage
@@ -42,14 +26,6 @@ properties:
       settings:
         id: Proton.ProtonDrive
         source: winget
-    
-    - resource: Microsoft.WinGet.DSC/WinGetPackage
-      directives:
-        description: Proton Mail Bridge
-        allowPrerelease: true
-      settings:
-        id: Proton.ProtonMailBridge
-        source: winget
      
     - resource: Microsoft.WinGet.DSC/WinGetPackage
       directives:
@@ -65,14 +41,6 @@ properties:
         allowPrerelease: true
       settings:
         id: Proton.ProtonVPN
-        source: winget      
-    
-    - resource: Microsoft.WinGet.DSC/WinGetPackage
-      directives:
-        description: Slack
-        allowPrerelease: true
-      settings:
-        id: SlackTechnologies.Slack
         source: winget
 
     - resource: Microsoft.WinGet.DSC/WinGetPackage
