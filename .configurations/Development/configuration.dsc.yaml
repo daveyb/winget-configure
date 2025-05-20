@@ -146,5 +146,21 @@ properties:
       settings:
         id: RedHat.VirtViewer
         source: winget
+
+    - resource: Microsoft.WinGet.DSC/WinGetPackage
+      directives:
+        description: VSCode Insiders
+        allowPrerelease: true
+      settings:
+        id: Microsoft.VisualStudioCode.Insiders
+        source: winget
+
+    - resource: Microsoft.WinGet.DSC/WinGetPackage
+      directives:
+        description: Microsoft.Edit editor
+        allowPrerelease: true
+      settings:
+        id: Microsoft.Edit
+        source: winget
         
   configurationVersion: 0.2.0
