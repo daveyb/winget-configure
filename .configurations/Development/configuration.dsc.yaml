@@ -162,5 +162,21 @@ properties:
       settings:
         id: Microsoft.Edit
         source: winget
+
+    - resource: Microsoft.WinGet.DSC/WinGetPackage
+      directives:
+        description: Chocolatey
+        allowPrerelease: true
+      settings:
+        id: Chocolatey.Chocolatey
+        source: winget
+
+    - resource: Microsoft.WinGet.DSC/WinGetPackage
+      directives:
+        description: AWS CLI
+        allowPrerelease: true
+      settings:
+        id: Amazon.AWSCLI
+        source: winget
         
   configurationVersion: 0.2.0
