@@ -59,4 +59,12 @@ properties:
         id: 9PL6P6ZHL1L7
         source: msstore
 
+    - resource: Microsoft.WinGet.DSC/WinGetPackage
+      directives:
+        description: Microsoft Store Package
+        allowPrerelease: true
+      settings:
+        id: 9WZDNCRDKRQ3
+        source: msstore
+
   configurationVersion: 0.2.0
