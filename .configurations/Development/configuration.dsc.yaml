@@ -186,5 +186,13 @@ properties:
       settings:
         id: Microsoft.FoundryLocal
         source: winget
+
+    - resource: Microsoft.WinGet.DSC/WinGetPackage
+      directives:
+        description: LM Studio
+        allowPrerelease: true
+      settings:
+        id: ElementLabs.LMStudio
+        source: winget
         
   configurationVersion: 0.2.0
