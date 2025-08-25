@@ -52,14 +52,6 @@ properties:
 
     - resource: Microsoft.WinGet.DSC/WinGetPackage
       directives:
-        description: Brave Browser
-        allowPrerelease: true
-      settings:
-        id: Brave.Brave
-        source: winget
-
-    - resource: Microsoft.WinGet.DSC/WinGetPackage
-      directives:
         description: Microsoft Office
         allowPrerelease: true
       settings:
