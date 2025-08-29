@@ -4,14 +4,6 @@ properties:
   resources:
     - resource: Microsoft.WinGet.DSC/WinGetPackage
       directives:
-        description: Install Pocket Casts Desktop
-        allowPrerelease: true
-      settings:
-        id: 9PCDBQX582BZ
-        source: msstore
-
-    - resource: Microsoft.WinGet.DSC/WinGetPackage
-      directives:
         description: Twinkle Tray Brightness Slider
         allowPrerelease: true
       settings:
@@ -95,7 +87,7 @@ properties:
         description: Sysinternals Suite (Better version of task manager)
         allowPrerelease: true
       settings:
-        id: Microsoft.Sysinternals
+        id: Microsoft.Sysinternals.Suite
         source: winget
         
   configurationVersion: 0.2.0

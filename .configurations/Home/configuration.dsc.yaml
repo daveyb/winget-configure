@@ -61,7 +61,7 @@ properties:
 
     - resource: Microsoft.WinGet.DSC/WinGetPackage
       directives:
-        description: Microsoft Store Package
+        description: FeedLab RSS Reader
         allowPrerelease: true
       settings:
         id: 9WZDNCRDKRQ3
