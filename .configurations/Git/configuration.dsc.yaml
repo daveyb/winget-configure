@@ -18,16 +18,35 @@ properties:
       settings:
         id: GitHub.cli
         source: winget
-
-    - resource: Microsoft.PowerShell.DSC/File
+        
+    - resource: Microsoft.PowerShell.DSC/Script
       directives:
-        description: Initialize .gitconfig file
+        description: Execute PowerShell script to configure .gitconfig
       settings:
         ensure: Present
-        destinationPath: $env:USERPROFILE\.gitconfig
-        contents: |
-          [credential]
-            helper = manager
-            useHttpPath = true
-          
+        getScript: |
+          # PowerShell script to check if .gitconfig exists
+          $gitConfigPath = Join-Path $env:USERPROFILE ".gitconfig"
+          if (Test-Path $gitConfigPath) {
+              return @{ Result = $true }
+          } else {
+              return @{ Result = $false }
+          }
+        setScript: |
+          # PowerShell script to run write_gitconfig.ps1
+          $scriptPath = Join-Path (Get-Location).Path "write_gitconfig.ps1"
+          if (Test-Path $scriptPath) {
+              & $scriptPath
+          } else {
+              Write-Error "Script write_gitconfig.ps1 not found at $scriptPath"
+          }
+        testScript: |
+          # PowerShell script to test if .gitconfig exists
+          $gitConfigPath = Join-Path $env:USERPROFILE ".gitconfig"
+          if (Test-Path $gitConfigPath) {
+              return $true
+          } else {
+              return $false
+          }
+
   configurationVersion: 0.2.0
