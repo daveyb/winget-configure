@@ -67,4 +67,12 @@ properties:
         id: 9WZDNCRDKRQ3
         source: msstore
 
+    - resource: Microsoft.WinGet.DSC/WinGetPackage
+      directives:
+        description: Ungoogle Chromium
+        allowPrerelease: true
+      settings:
+        id: Eloston.UngoogleChromium
+        source: winget
+
   configurationVersion: 0.2.0
