@@ -49,6 +49,7 @@ param(
         "Microsoft.AzureCLI",
         "Microsoft.PowerToys",
         "Microsoft.Sysinternals.Suite",
+        "PDFLabs.PDFtk.Free",
         "Proton.ProtonDrive",
         "Proton.ProtonVPN",
         "Python.Python.3.14",
