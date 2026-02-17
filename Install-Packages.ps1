@@ -49,6 +49,8 @@ param(
         "Microsoft.AzureCLI",
         "Microsoft.PowerToys",
         "Microsoft.Sysinternals.Suite",
+        "Microsoft.VisualStudioCode.Insiders",
+        "Microsoft.VisualStudioCode",
         "PDFLabs.PDFtk.Free",
         "Proton.ProtonDrive",
         "Proton.ProtonVPN",
