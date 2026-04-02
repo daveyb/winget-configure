@@ -1,0 +1,95 @@
+# winget-packages.yml
+# Curated list of packages to install via Windows Package Manager (winget).
+# All categories are merged at install time - grouping is purely for organisation.
+#
+# Usage:
+#   .\Install-Packages.ps1                    # installs everything defined here
+#   .\Install-Packages.ps1 -Force             # force-reinstall all packages
+#   .\Install-Packages.ps1 -PackageList @("Git.Git", "GitHub.cli")  # override list
+
+packages:
+  # ── Development tools & languages ────────────────────────────────────────────
+  development:
+    - Git.Git # Git version control
+    - GitHub.cli # GitHub CLI (gh)
+    - GitHub.Copilot # GitHub Copilot CLI extension
+    - GoLang.Go # Go programming language
+    - Python.Python.3.14 # Python 3.14
+    - Python.Python.3.10 # Python 3.10
+    - Python.Launcher # Python launcher (py.exe)
+    - RubyInstallerTeam.RubyWithDevKit.3.4 # Ruby 3.4 with DevKit
+    - LLVM.LLVM # LLVM / Clang compiler toolchain
+    - Neovim.Neovim # Neovim text editor
+    - ZedIndustries.Zed # Zed code editor
+    - Microsoft.VisualStudioCode # Visual Studio Code
+    - Microsoft.VisualStudioCode.Insiders # Visual Studio Code Insiders
+    - Microsoft.VisualStudio.2022.Community # Visual Studio 2022 Community
+    - Microsoft.PowerShell # PowerShell 7+
+    - Microsoft.WindowsTerminal # Windows Terminal
+    - JanDeDobbeleer.OhMyPosh # Oh My Posh prompt theme engine
+
+  # ── Cloud & infrastructure ────────────────────────────────────────────────────
+  cloud_infrastructure:
+    - Amazon.AWSCLI # AWS CLI v2
+    - Microsoft.AzureCLI # Azure CLI
+    - Hashicorp.Terraform # Terraform IaC
+    - Terraform-docs.Terraform-docs # terraform-docs
+    - Kubernetes.kubectl # kubectl
+    - Derailed.k9s # k9s – Kubernetes TUI
+    - Microsoft.FoundryLocal # Azure AI Foundry Local
+
+  # ── Containers & virtualisation ──────────────────────────────────────────────
+  containers_virtualization:
+    - Microsoft.WSL # Windows Subsystem for Linux
+    - Canonical.Ubuntu.2404 # Ubuntu 24.04 LTS (WSL distro)
+    - Canonical.Ubuntu.2204 # Ubuntu 22.04 LTS (WSL distro)
+    - LinuxContainers.Incus # Incus system container manager
+    - SUSE.RancherDesktop # Rancher Desktop (containerd / k3s)
+
+  # ── Productivity ──────────────────────────────────────────────────────────────
+  productivity:
+    - Microsoft.PowerToys # Windows PowerToys
+    - Microsoft.Sysinternals.Suite # Sysinternals Suite
+    - Microsoft.Teams # Microsoft Teams
+    - Microsoft.Office # Microsoft 365 / Office
+    - PDFLabs.PDFtk.Free # PDFtk – PDF toolkit
+    - calibre.calibre # Calibre e-book manager
+    - FlorianHeidenreich.Mp3tag # Mp3tag audio tag editor
+    - Tailscale.Tailscale # Tailscale VPN mesh
+    - Proton.ProtonVPN # Proton VPN
+    - Proton.ProtonDrive # Proton Drive
+
+  # ── Media & entertainment ─────────────────────────────────────────────────────
+  media_entertainment:
+    - Spotify.Spotify # Spotify music streaming
+    - Automattic.PocketCasts # Pocket Casts podcast player
+    - VideoLAN.VLC # VLC media player
+    - HandBrake.HandBrake # HandBrake video transcoder
+    - LIGHTNINGUK.ImgBurn # ImgBurn disc image burner
+    - GuinpinSoft.MakeMKV # MakeMKV disc ripper
+    - Gyan.FFmpeg # FFmpeg multimedia framework
+    - Transmission.Transmission # Transmission BitTorrent client
+    - Valve.Steam # Steam gaming platform
+    - GOG.Galaxy # GOG Galaxy game launcher
+    - TASEmulators.BizHawk # BizHawk multi-system emulator
+    - Libretro.RetroArch # RetroArch frontend for libretro
+
+  # ── Data science & ML ─────────────────────────────────────────────────────────
+  data_science:
+    - ProjectJupyter.JupyterLab # JupyterLab notebook IDE
+    - Anaconda.Anaconda3 # Anaconda Python distribution
+    - Anaconda.Miniconda3 # Miniconda (minimal conda)
+    - astral-sh.uv # uv – fast Python package manager
+
+  # ── Browsers ──────────────────────────────────────────────────────────────────
+  browsers:
+    - eloston.ungoogled-chromium # Ungoogled Chromium
+
+  # ── Communication ─────────────────────────────────────────────────────────────
+  communication:
+    - Element.Element # Element Matrix client
+    - Zoom.Zoom # Zoom video conferencing
+
+  # ── 3D printing ───────────────────────────────────────────────────────────────
+  printing_3d:
+    - Bambulab.Bambustudio # Bambu Studio slicer
