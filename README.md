@@ -97,6 +97,20 @@ winget configure -f .\.configurations\Development\configuration.dsc.yaml
 - Administrator privileges
 - Internet connection
 
+### Installing PowerShell 7.6.0+
+
+The scripts in this repo require **PowerShell 7.6.0 or later**. Download the latest release from the [PowerShell GitHub Releases page](https://github.com/PowerShell/PowerShell/releases/latest) and install it before proceeding.
+
+### Setting the Execution Policy
+
+After installing PowerShell 7.6+, allow script execution for your user account by running the following in an elevated PowerShell session:
+
+```powershell
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+```
+
+This allows locally-created scripts (like `Install-Packages.ps1`) to run without requiring them to be signed.
+
 ## Package Lists
 
 ### PowerShell Script Packages
