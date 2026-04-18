@@ -140,7 +140,7 @@ def create_release(tag: str, title: str, notes: str, *, draft: bool = False) -> 
         "gh", "release", "create", tag,
         "--title", title,
         "--notes", notes,
-        "--target", "main",
+        "--target", "develop",
     ]
     if draft:
         cmd.append("--draft")
