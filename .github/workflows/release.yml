@@ -1,0 +1,27 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - CHANGELOG.md
+
+jobs:
+  release:
+    name: Create or update release
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write   # required to create releases and push tags
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # full history so tags are available for comparison
+
+      - name: Parse CHANGELOG and manage releases
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 .github/scripts/create_release.py
