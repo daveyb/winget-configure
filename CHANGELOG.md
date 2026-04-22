@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+
+## [1.0.2] - 2026-04-19
+
+### Added
+- Telegram
+- NodeJS
+- Claude Code
+
+### Removed
+- Neovim (unused)
+- Visual Studio 2022 (unused)
+- PocketCasts (failing)
+- Anaconda (failing)
+- miniconda (failing)
+
 ## [1.0.1] - 2026-04-18
 
 ### Added

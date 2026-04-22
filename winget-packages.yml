@@ -1,11 +1,16 @@
 # winget-packages.yml
 # Curated list of packages to install via Windows Package Manager (winget).
-# All categories are merged at install time - grouping is purely for organisation.
+# All categories are merged at generation time — grouping is purely for organisation.
 #
-# Usage:
-#   .\Install-Packages.ps1                    # installs everything defined here
-#   .\Install-Packages.ps1 -Force             # force-reinstall all packages
-#   .\Install-Packages.ps1 -PackageList @("Git.Git", "GitHub.cli")  # override list
+# This file is the SINGLE SOURCE OF TRUTH for the package list.
+# Edit packages here, then regenerate the DSC configuration:
+#
+#   .\New-WingetConfiguration.ps1             # regenerate .configurations\configuration.dsc.yaml
+#   .\New-WingetConfiguration.ps1 -Force      # regenerate without prompting
+#
+# Then apply the configuration idempotently:
+#
+#   winget configure -f .configurations\configuration.dsc.yaml
 
 packages:
   # ── Development tools & languages ────────────────────────────────────────────
@@ -19,18 +24,17 @@ packages:
     - Python.Launcher # Python launcher (py.exe)
     - RubyInstallerTeam.RubyWithDevKit.3.4 # Ruby 3.4 with DevKit
     - LLVM.LLVM # LLVM / Clang compiler toolchain
-    - Neovim.Neovim # Neovim text editor
     - ZedIndustries.Zed # Zed code editor
     - Microsoft.VisualStudioCode # Visual Studio Code
     - Microsoft.VisualStudioCode.Insiders # Visual Studio Code Insiders
-    - Microsoft.VisualStudio.2022.Community # Visual Studio 2022 Community
     - Microsoft.PowerShell # PowerShell 7+
     - Microsoft.WindowsTerminal # Windows Terminal
     - JanDeDobbeleer.OhMyPosh # Oh My Posh prompt theme engine
+    - OpenJS.NodeJS
+    - Anthropic.ClaudeCode
 
   # ── Cloud & infrastructure ────────────────────────────────────────────────────
   cloud_infrastructure:
-    - Amazon.AWSCLI # AWS CLI v2
     - Microsoft.AzureCLI # Azure CLI
     - Hashicorp.Terraform # Terraform IaC
     - Terraform-docs.Terraform-docs # terraform-docs
@@ -62,7 +66,6 @@ packages:
   # ── Media & entertainment ─────────────────────────────────────────────────────
   media_entertainment:
     - Spotify.Spotify # Spotify music streaming
-    - Automattic.PocketCasts # Pocket Casts podcast player
     - VideoLAN.VLC # VLC media player
     - HandBrake.HandBrake # HandBrake video transcoder
     - LIGHTNINGUK.ImgBurn # ImgBurn disc image burner
@@ -77,8 +80,6 @@ packages:
   # ── Data science & ML ─────────────────────────────────────────────────────────
   data_science:
     - ProjectJupyter.JupyterLab # JupyterLab notebook IDE
-    - Anaconda.Anaconda3 # Anaconda Python distribution
-    - Anaconda.Miniconda3 # Miniconda (minimal conda)
     - astral-sh.uv # uv – fast Python package manager
 
   # ── Browsers ──────────────────────────────────────────────────────────────────
@@ -89,6 +90,7 @@ packages:
   communication:
     - Element.Element # Element Matrix client
     - Zoom.Zoom # Zoom video conferencing
+    - Telegram.TelegramDesktop
 
   # ── 3D printing ───────────────────────────────────────────────────────────────
   printing_3d:
