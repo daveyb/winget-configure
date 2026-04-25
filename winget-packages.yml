@@ -32,6 +32,7 @@ packages:
     - JanDeDobbeleer.OhMyPosh # Oh My Posh prompt theme engine
     - OpenJS.NodeJS
     - Anthropic.ClaudeCode
+    - Anysphere.Cursor
 
   # ── Cloud & infrastructure ────────────────────────────────────────────────────
   cloud_infrastructure:

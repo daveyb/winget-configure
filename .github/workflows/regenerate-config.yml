@@ -1,0 +1,172 @@
+name: Regenerate DSC Configuration
+
+on:
+  push:
+    branches: [main]
+    paths: [winget-packages.yml]
+
+jobs:
+  regenerate:
+    name: Regenerate configuration.dsc.yaml
+    runs-on: windows-latest
+
+    # Don't run when the push came from this workflow's own PR merge
+    if: github.actor != 'github-actions[bot]'
+
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2  # need HEAD~1 for comparison
+
+      - name: Run generator
+        shell: pwsh
+        run: |
+          .\New-WingetConfiguration.ps1 `
+            -Force `
+            -CompareRef HEAD~1 `
+            -ChangesOutputFile changes.json
+
+      - name: Read changes
+        id: changes
+        shell: pwsh
+        run: |
+          $changes = Get-Content -Path changes.json -Raw | ConvertFrom-Json
+
+          $added   = @($changes.added)
+          $removed = @($changes.removed)
+
+          # Build markdown fragments for the CHANGELOG
+          $body = ""
+
+          if ($added.Count -gt 0) {
+            $body += "### Added`n"
+            foreach ($id in $added) {
+              $body += "- $id`n"
+            }
+            $body += "`n"
+          }
+
+          if ($removed.Count -gt 0) {
+            $body += "### Removed`n"
+            foreach ($id in $removed) {
+              $body += "- $id`n"
+            }
+            $body += "`n"
+          }
+
+          $hasChanges = ($added.Count -gt 0 -or $removed.Count -gt 0)
+
+          # Write outputs
+          "has_changes=$hasChanges" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "added_count=$($added.Count)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "removed_count=$($removed.Count)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+          # Write the changelog body to a temp file (multiline output is tricky)
+          $body | Out-File -FilePath changelog_entry.md -Encoding UTF8
+
+      - name: Update CHANGELOG.md
+        if: steps.changes.outputs.has_changes == 'True'
+        shell: pwsh
+        run: |
+          $entry = Get-Content -Path changelog_entry.md -Raw
+          $changelog = Get-Content -Path CHANGELOG.md -Raw
+
+          # Replace the empty [Unreleased] section with the new content
+          # Match "## [Unreleased]" followed by optional whitespace/newlines up to the next "## ["
+          $pattern = '(?s)(## \[Unreleased\]\s*?\n)\s*?(?=\n## \[)'
+          $replacement = "`$1`n$entry`n"
+
+          if ($changelog -match '## \[Unreleased\]') {
+            $updated = $changelog -replace $pattern, $replacement
+          } else {
+            # If there's no [Unreleased] section, insert one after the header
+            $updated = $changelog -replace '(# Changelog.*?\n\n)', "`$1## [Unreleased]`n`n$entry`n"
+          }
+
+          Set-Content -Path CHANGELOG.md -Value $updated -Encoding UTF8 -NoNewline
+
+      - name: Check for file changes
+        id: diff
+        shell: pwsh
+        run: |
+          git add -A
+          $diff = git diff --cached --name-only
+          if ($diff) {
+            "files_changed=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+            Write-Host "Changed files:"
+            Write-Host $diff
+          } else {
+            "files_changed=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+            Write-Host "No file changes detected."
+          }
+
+      - name: Create or update PR
+        if: steps.diff.outputs.files_changed == 'true'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $branch = "chore/regenerate-dsc-config"
+          $added = "${{ steps.changes.outputs.added_count }}"
+          $removed = "${{ steps.changes.outputs.removed_count }}"
+
+          # Configure git
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Clean up the changes.json and changelog_entry.md temp files
+          git reset HEAD changes.json changelog_entry.md 2>$null
+          Remove-Item -Path changes.json, changelog_entry.md -ErrorAction SilentlyContinue
+
+          # Create or reset the branch
+          git checkout -B $branch
+
+          # Stage only the files we care about
+          git add .configurations/configuration.dsc.yaml CHANGELOG.md
+
+          # Commit
+          git commit -m "chore: regenerate DSC configuration [skip ci]" `
+            -m "Added: $added package(s), Removed: $removed package(s)"
+
+          # Force-push the branch (we always reset it)
+          git push --force origin $branch
+
+          # Check if a PR already exists
+          $existingPr = gh pr list --head $branch --json number --jq '.[0].number' 2>$null
+
+          $prBody = @"
+          ## Regenerated DSC Configuration
+
+          This PR was automatically generated by the **Regenerate DSC Configuration** workflow
+          after changes to ``winget-packages.yml`` were pushed to ``main``.
+
+          ### Summary
+          - **Added**: $added package(s)
+          - **Removed**: $removed package(s)
+
+          ### Files changed
+          - ``.configurations/configuration.dsc.yaml`` — regenerated from ``winget-packages.yml``
+          - ``CHANGELOG.md`` — updated ``[Unreleased]`` section
+
+          ### What to do
+          1. Review the changes below.
+          2. Merge this PR to apply the changes.
+          3. The existing **Release** workflow will pick up the CHANGELOG update and manage draft/published releases.
+          "@
+
+          if ($existingPr) {
+            Write-Host "Updating existing PR #$existingPr"
+            gh pr edit $existingPr --body $prBody
+          } else {
+            Write-Host "Creating new PR"
+            gh pr create `
+              --head $branch `
+              --base main `
+              --title "chore: regenerate DSC configuration (+$added / -$removed packages)" `
+              --body $prBody
+          }
