@@ -1,2 +1,9 @@
 # Windows null device — created accidentally by shell redirects
+
+# Ignored directories for agents and AI tools
+.agents/
+.claude/
+agent-skills/
+skills-lock.json
+skills-lock.json
 nul

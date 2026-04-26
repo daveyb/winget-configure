@@ -23,7 +23,6 @@ packages:
     - Python.Python.3.10 # Python 3.10
     - Python.Launcher # Python launcher (py.exe)
     - RubyInstallerTeam.RubyWithDevKit.3.4 # Ruby 3.4 with DevKit
-    - LLVM.LLVM # LLVM / Clang compiler toolchain
     - ZedIndustries.Zed # Zed code editor
     - Microsoft.VisualStudioCode # Visual Studio Code
     - Microsoft.VisualStudioCode.Insiders # Visual Studio Code Insiders
@@ -33,6 +32,7 @@ packages:
     - OpenJS.NodeJS
     - Anthropic.ClaudeCode
     - Anysphere.Cursor
+    - OpenAI.Codex
 
   # ── Cloud & infrastructure ────────────────────────────────────────────────────
   cloud_infrastructure:
@@ -86,6 +86,7 @@ packages:
   # ── Browsers ──────────────────────────────────────────────────────────────────
   browsers:
     - eloston.ungoogled-chromium # Ungoogled Chromium
+    - Mozilla.Firefox
 
   # ── Communication ─────────────────────────────────────────────────────────────
   communication:
