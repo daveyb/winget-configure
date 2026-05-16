@@ -7,6 +7,10 @@ on:
     paths:
       - CHANGELOG.md
 
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 jobs:
   release:
     name: Create or update release
