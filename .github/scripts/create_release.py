@@ -22,6 +22,7 @@ SemVer inference from [Unreleased] change types (keepachangelog.com):
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
 import sys
@@ -134,8 +135,15 @@ def delete_release(tag: str) -> None:
               file=sys.stderr)
 
 
+DSC_CONFIG_ASSET = ".configurations/configuration.dsc.yaml"
+
+
 def create_release(tag: str, title: str, notes: str, *, draft: bool = False) -> None:
-    """Create a GitHub release (and its git tag) targeting ``main``."""
+    """Create a GitHub release (and its git tag) targeting ``main``.
+
+    Automatically attaches ``.configurations/configuration.dsc.yaml`` as a
+    release asset when the file is present in the working tree.
+    """
     cmd = [
         "gh", "release", "create", tag,
         "--title", title,
@@ -144,6 +152,11 @@ def create_release(tag: str, title: str, notes: str, *, draft: bool = False) -> 
     ]
     if draft:
         cmd.append("--draft")
+    if os.path.isfile(DSC_CONFIG_ASSET):
+        cmd.append(DSC_CONFIG_ASSET)
+        print(f"    Attaching asset: {DSC_CONFIG_ASSET}")
+    else:
+        print(f"    Warning: asset not found, skipping: {DSC_CONFIG_ASSET}", file=sys.stderr)
     _run(cmd)
 
 
