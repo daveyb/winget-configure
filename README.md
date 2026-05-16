@@ -6,7 +6,7 @@ Declarative, idempotent Windows package management powered by [winget configure]
 
 ```powershell
 # 1. Edit the package list (optional — sensible defaults are included)
-notepad .\winget-packages.yml
+edit .\winget-packages.yml
 
 # 2. Generate the DSC configuration file
 .\New-WingetConfiguration.ps1
@@ -16,6 +16,40 @@ winget configure -f .configurations\configuration.dsc.yaml
 ```
 
 > **Note:** `winget configure` requires a Microsoft-connected account. If you are using a local Windows account, see [Legacy Mode](#legacy-mode) below.
+
+## Apply the Released Configuration Without Cloning
+
+Each [GitHub release](https://github.com/daveyb/winget-configure/releases/latest) ships `configuration.dsc.yaml` as a downloadable asset. If you want to apply the exact package set without cloning the repository, download and run it directly from PowerShell:
+
+```powershell
+# Download the latest released configuration
+$dest = Join-Path $env:TEMP "configuration.dsc.yaml"
+Invoke-WebRequest `
+    -Uri "https://github.com/daveyb/winget-configure/releases/latest/download/configuration.dsc.yaml" `
+    -OutFile $dest
+
+# Apply it
+winget configure -f $dest
+```
+
+Or as a single pipeline:
+
+```powershell
+winget configure -f ($(Invoke-WebRequest `
+    "https://github.com/daveyb/winget-configure/releases/latest/download/configuration.dsc.yaml" `
+    -OutFile ($d = Join-Path $env:TEMP "configuration.dsc.yaml")) ; $d)
+```
+
+To target a specific version instead of the latest, replace `latest/download` with `download/<tag>` — for example:
+
+```powershell
+# Pin to a specific release tag
+Invoke-WebRequest `
+    -Uri "https://github.com/daveyb/winget-configure/releases/download/v1.1.1/configuration.dsc.yaml" `
+    -OutFile (Join-Path $env:TEMP "configuration.dsc.yaml")
+```
+
+> **Prerequisites still apply:** an elevated (Administrator) PowerShell session and a Microsoft-connected account are required by `winget configure`. See [Prerequisites](#prerequisites) for details.
 
 ## How It Works
 
