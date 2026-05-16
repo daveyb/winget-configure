@@ -54,24 +54,92 @@ param(
 
     [switch]$Force,
 
-    [switch]$Quiet
+    [switch]$Quiet,
+
+    [switch]$Thermonuclear
 )
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-function Write-ProgressInfo {
-    param([string]$Message, [switch]$Quiet)
-    if (-not $Quiet) { Write-Host $Message -ForegroundColor Blue }
+function Uninstall-WingetPackage
+{
+    <#
+    .SYNOPSIS
+        Uninstalls a single package using winget.
+
+    .PARAMETER PackageId
+        The winget package ID to uninstall.
+
+    .OUTPUTS
+        Hashtable with keys: PackageId, Success, Message.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$PackageId,
+        [switch]$Quiet
+    )
+
+    $result = @{
+        PackageId = $PackageId
+        Success   = $false
+        Message   = ''
+    }
+
+    try
+    {
+        Write-ProgressInfo "Processing uninstallation: $PackageId" -Quiet:$Quiet
+
+        $uninstallArgs = @(
+            'uninstall',
+            '--id',    $PackageId,
+            '--exact',
+            '--silent'
+        )
+
+        $output = & winget $uninstallArgs 2>&1
+
+        if ($LASTEXITCODE -eq 0)
+        {
+            $result.Success = $true
+            $result.Message = 'Successfully uninstalled'
+            Write-ProgressSuccess "  └─ ✓ Successfully uninstalled $PackageId" -Quiet:$Quiet
+        } else
+        {
+            $result.Message = "Uninstallation failed (exit code: $LASTEXITCODE)"
+            Write-ProgressWarning "  └─ ✗ Failed to uninstall $PackageId (exit code: $LASTEXITCODE)" -Quiet:$Quiet
+        }
+    } catch
+    {
+        $result.Message = "Exception during uninstallation: $($_.Exception.Message)"
+        Write-ProgressWarning "  └─ ✗ Exception: $($_.Exception.Message)" -Quiet:$Quiet
+    }
+
+    return $result
 }
 
-function Write-ProgressSuccess {
+function Write-ProgressInfo
+{
     param([string]$Message, [switch]$Quiet)
-    if (-not $Quiet) { Write-Host $Message -ForegroundColor Green }
+    if (-not $Quiet)
+    { Write-Host $Message -ForegroundColor Blue 
+    }
 }
 
-function Write-ProgressWarning {
+function Write-ProgressSuccess
+{
     param([string]$Message, [switch]$Quiet)
-    if (-not $Quiet) { Write-Warning $Message }
+    if (-not $Quiet)
+    { Write-Host $Message -ForegroundColor Green 
+    }
+}
+
+function Write-ProgressWarning
+{
+    param([string]$Message, [switch]$Quiet)
+    if (-not $Quiet)
+    { Write-Warning $Message 
+    }
 }
 
 # ── Lightweight YAML parser ───────────────────────────────────────────────────
@@ -89,7 +157,8 @@ function Write-ProgressWarning {
 #   • Lines that match /^\s+-\s+(\S+)/ are list items → capture group 1.
 #   • Everything else (top-level keys, category keys) → skip.
 
-function Read-WingetPackagesYaml {
+function Read-WingetPackagesYaml
+{
     <#
     .SYNOPSIS
         Parses a winget-packages.yml file and returns a flat array of package IDs.
@@ -103,22 +172,29 @@ function Read-WingetPackagesYaml {
         [string]$Path
     )
 
-    if (-not (Test-Path $Path)) {
+    if (-not (Test-Path $Path))
+    {
         Write-Error "Packages config file not found: $Path"
         return @()
     }
 
     $packages = [System.Collections.Generic.List[string]]::new()
 
-    foreach ($line in Get-Content -Path $Path -Encoding UTF8) {
+    foreach ($line in Get-Content -Path $Path -Encoding UTF8)
+    {
         # Skip blank lines
-        if ([string]::IsNullOrWhiteSpace($line)) { continue }
+        if ([string]::IsNullOrWhiteSpace($line))
+        { continue 
+        }
 
         # Skip comment-only lines
-        if ($line -match '^\s*#') { continue }
+        if ($line -match '^\s*#')
+        { continue 
+        }
 
         # Capture list items:  <whitespace> - <PackageId> [# optional comment]
-        if ($line -match '^\s+-\s+(\S+)') {
+        if ($line -match '^\s+-\s+(\S+)')
+        {
             $packageId = $Matches[1].Trim()
 
             # Strip any trailing inline comment that somehow ended up attached
@@ -126,7 +202,8 @@ function Read-WingetPackagesYaml {
             $packageId = $packageId -replace '#.*$', ''
             $packageId = $packageId.Trim()
 
-            if ($packageId -ne '') {
+            if ($packageId -ne '')
+            {
                 $packages.Add($packageId)
             }
         }
@@ -138,7 +215,8 @@ function Read-WingetPackagesYaml {
 
 # ── Package installer ─────────────────────────────────────────────────────────
 
-function Install-WingetPackage {
+function Install-WingetPackage
+{
     <#
     .SYNOPSIS
         Installs a single package using winget.
@@ -167,13 +245,16 @@ function Install-WingetPackage {
         AlreadyInstalled = $false
     }
 
-    try {
+    try
+    {
         Write-ProgressInfo "Processing package: $PackageId" -Quiet:$Quiet
 
         # Check if already installed (skip when -Force is set)
-        if (-not $Force) {
+        if (-not $Force)
+        {
             $listOutput = winget list --id $PackageId --exact 2>$null
-            if ($LASTEXITCODE -eq 0 -and $listOutput -match [regex]::Escape($PackageId)) {
+            if ($LASTEXITCODE -eq 0 -and $listOutput -match [regex]::Escape($PackageId))
+            {
                 $result.AlreadyInstalled = $true
                 $result.Success          = $true
                 $result.Message          = 'Already installed'
@@ -192,37 +273,41 @@ function Install-WingetPackage {
             '--accept-package-agreements',
             '--accept-source-agreements'
         )
-        if ($Force) { $installArgs += '--force' }
+        if ($Force)
+        { $installArgs += '--force' 
+        }
 
         $output = & winget $installArgs 2>&1
 
-        if ($LASTEXITCODE -eq 0) {
+        if ($LASTEXITCODE -eq 0)
+        {
             $result.Success = $true
             $result.Message = 'Successfully installed'
             Write-ProgressSuccess "  └─ ✓ Successfully installed $PackageId" -Quiet:$Quiet
-        }
-        elseif ($LASTEXITCODE -eq -1978335189) {
+        } elseif ($LASTEXITCODE -eq -1978335189)
+        {
             # APPINSTALLER_HRESULT_NO_UPDATE_AVAILABLE / already installed
             $result.Success          = $true
             $result.AlreadyInstalled = $true
             $result.Message          = 'Already installed (detected during install)'
             Write-ProgressInfo "  └─ Package already installed" -Quiet:$Quiet
-        }
-        else {
+        } else
+        {
             $result.Message = "Installation failed (exit code: $LASTEXITCODE)"
             Write-ProgressWarning "  └─ ✗ Failed to install $PackageId (exit code: $LASTEXITCODE)" -Quiet:$Quiet
 
-            if ($output -match 'No package found matching input criteria') {
+            if ($output -match 'No package found matching input criteria')
+            {
                 $result.Message = 'Package not found in winget repository'
                 Write-ProgressWarning "    └─ Package not found in repository" -Quiet:$Quiet
-            }
-            elseif ($output -match 'requires admin privileges') {
+            } elseif ($output -match 'requires admin privileges')
+            {
                 $result.Message = 'Requires administrator privileges'
                 Write-ProgressWarning "    └─ Administrator privileges required" -Quiet:$Quiet
             }
         }
-    }
-    catch {
+    } catch
+    {
         $result.Message = "Exception during installation: $($_.Exception.Message)"
         Write-ProgressWarning "  └─ ✗ Exception: $($_.Exception.Message)" -Quiet:$Quiet
     }
@@ -238,7 +323,8 @@ Write-Host ''
 # Step 0: Resolve the winget helper module
 $helperPath = Join-Path $PSScriptRoot 'helpers\Ensure-Winget.psm1'
 
-if (-not (Test-Path $helperPath)) {
+if (-not (Test-Path $helperPath))
+{
     Write-Error "Helper module not found at: $helperPath"
     Write-Error 'Please ensure the helpers directory and Ensure-Winget.psm1 exist.'
     exit 1
@@ -253,12 +339,14 @@ Import-Module $helperPath -Force
 #   2. -ConfigFile parameter  (explicit YAML path)
 #   3. winget-packages.yml next to this script (default)
 
-if ($PSBoundParameters.ContainsKey('PackageList') -and $PackageList.Count -gt 0) {
+if ($PSBoundParameters.ContainsKey('PackageList') -and $PackageList.Count -gt 0)
+{
     Write-ProgressInfo 'Using package list supplied via -PackageList parameter.' -Quiet:$Quiet
-}
-else {
+} else
+{
     # Resolve config file path
-    if (-not $PSBoundParameters.ContainsKey('ConfigFile') -or [string]::IsNullOrWhiteSpace($ConfigFile)) {
+    if (-not $PSBoundParameters.ContainsKey('ConfigFile') -or [string]::IsNullOrWhiteSpace($ConfigFile))
+    {
         $ConfigFile = Join-Path $PSScriptRoot 'winget-packages.yml'
     }
 
@@ -266,7 +354,8 @@ else {
 
     $PackageList = Read-WingetPackagesYaml -Path $ConfigFile
 
-    if ($PackageList.Count -eq 0) {
+    if ($PackageList.Count -eq 0)
+    {
         Write-Error "No packages found in '$ConfigFile'. Aborting."
         exit 1
     }
@@ -279,7 +368,8 @@ Write-Host ''
 # Step 2: Ensure winget is available ──────────────────────────────────────────
 Write-ProgressInfo 'Step 1: Ensuring winget is available...' -Quiet:$Quiet
 
-if (-not (Ensure-Winget -Quiet:$Quiet)) {
+if (-not (Ensure-Winget -Quiet:$Quiet))
+{
     Write-Error 'Failed to enable winget. Cannot proceed with package installation.'
     Write-Host 'Please ensure you are running as Administrator and try again.' -ForegroundColor Yellow
     exit 1
@@ -288,9 +378,13 @@ if (-not (Ensure-Winget -Quiet:$Quiet)) {
 Write-ProgressSuccess '✓ winget is ready' -Quiet:$Quiet
 Write-Host ''
 
-# Step 3: Install packages ─────────────────────────────────────────────────────
-Write-ProgressInfo 'Step 2: Installing packages...' -Quiet:$Quiet
-Write-ProgressInfo "Packages to install: $($PackageList.Count)" -Quiet:$Quiet
+# Step 3: Process packages ────────────────────────────────────────────────────
+Write-ProgressInfo 'Step 2: Processing packages...' -Quiet:$Quiet
+if ($Thermonuclear)
+{
+    Write-ProgressInfo '!!! THERMONUCLEAR MODE ENABLED: Uninstalling all packages !!!' -Quiet:$Quiet
+}
+Write-ProgressInfo "Packages to process: $($PackageList.Count)" -Quiet:$Quiet
 Write-Host ''
 
 $results              = @()
@@ -298,48 +392,84 @@ $successCount         = 0
 $alreadyInstalledCount = 0
 $failedCount          = 0
 
-foreach ($package in $PackageList) {
-    $result   = Install-WingetPackage -PackageId $package -Force:$Force -Quiet:$Quiet
+foreach ($package in $PackageList)
+{
+    if ($Thermonuclear)
+    {
+        $result = Uninstall-WingetPackage -PackageId $package -Quiet:$Quiet
+    } else
+    {
+        $result = Install-WingetPackage -PackageId $package -Force:$Force -Quiet:$Quiet
+    }
     $results += $result
 
-    if ($result.Success) {
-        if ($result.AlreadyInstalled) { $alreadyInstalledCount++ }
-        else                          { $successCount++ }
-    }
-    else {
+    if ($result.Success)
+    {
+        if ($Thermonuclear)
+        {
+            $successCount++
+        } else
+        {
+            if ($result.AlreadyInstalled)
+            { $alreadyInstalledCount++ 
+            } else
+            { $successCount++ 
+            }
+        }
+    } else
+    {
         $failedCount++
     }
 }
 
 # Step 4: Summary ──────────────────────────────────────────────────────────────
 Write-Host ''
-Write-Host '=== Installation Summary ===' -ForegroundColor Cyan
+Write-Host "=== $(if ($Thermonuclear) { 'Uninstallation' } else { 'Installation' }) Summary ===" -ForegroundColor Cyan
 Write-Host "Total packages processed : $($PackageList.Count)" -ForegroundColor White
-Write-Host "Successfully installed   : $successCount"          -ForegroundColor Green
-Write-Host "Already installed        : $alreadyInstalledCount"  -ForegroundColor Blue
-Write-Host "Failed installations     : $failedCount"            -ForegroundColor Red
+Write-Host "Successfully $(if ($Thermonuclear) { 'uninstalled' } else { 'installed' })   : $successCount" -ForegroundColor Green
+if (-not $Thermonuclear)
+{
+    Write-Host "Already installed        : $alreadyInstalledCount" -ForegroundColor Blue
+}
+Write-Host "Failed operations        : $failedCount"            -ForegroundColor Red
 
-if ($failedCount -gt 0) {
+if ($failedCount -gt 0)
+{
     Write-Host ''
     Write-Host 'Failed packages:' -ForegroundColor Red
-    foreach ($result in ($results | Where-Object { -not $_.Success })) {
+    foreach ($result in ($results | Where-Object { -not $_.Success }))
+    {
         Write-Host "  • $($result.PackageId): $($result.Message)" -ForegroundColor Red
     }
 }
 
-if (-not $Quiet -and $results.Count -gt 0) {
+if (-not $Quiet -and $results.Count -gt 0)
+{
     Write-Host ''
     Write-Host 'Detailed results:' -ForegroundColor Gray
-    foreach ($result in $results) {
-        $status = if ($result.Success) {
-            if ($result.AlreadyInstalled) { 'Already Installed' } else { 'Installed' }
+    foreach ($result in $results)
+    {
+        $status = if ($result.Success)
+        {
+            if ($result.AlreadyInstalled)
+            { 'Already Installed' 
+            } else
+            { 'Installed' 
+            }
+        } else
+        { 'Failed' 
         }
-        else { 'Failed' }
 
-        $color = if ($result.Success) {
-            if ($result.AlreadyInstalled) { 'Blue' } else { 'Green' }
+        $color = if ($result.Success)
+        {
+            if ($result.AlreadyInstalled)
+            { 'Blue' 
+            } else
+            { 'Green' 
+            }
+        } else
+        { 'Red' 
         }
-        else { 'Red' }
 
         Write-Host "  $($result.PackageId): $status" -ForegroundColor $color
     }
@@ -347,11 +477,12 @@ if (-not $Quiet -and $results.Count -gt 0) {
 
 Write-Host ''
 
-if ($failedCount -eq 0) {
+if ($failedCount -eq 0)
+{
     Write-Host '✓ All packages processed successfully!' -ForegroundColor Green
     exit 0
-}
-else {
+} else
+{
     Write-Host '⚠ Some packages failed to install. Check the summary above for details.' -ForegroundColor Yellow
     exit 1
 }

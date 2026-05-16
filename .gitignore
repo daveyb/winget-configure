@@ -3,7 +3,9 @@
 # Ignored directories for agents and AI tools
 .agents/
 .claude/
+.zed/
 agent-skills/
 skills-lock.json
 skills-lock.json
 nul
+.github/agents
