@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- GitHub releases (published and draft) now include `configuration.dsc.yaml` as a
+  downloadable asset, attached automatically by the release workflow
+
+### Fixed
+- `regenerate-config.yml` trigger branch was `main` — corrected to `develop` to match
+  where package changes are authored
+- `regenerate-config.yml` created PRs targeting `main` instead of `develop` — corrected
+  so the generated config is proposed back into the same working branch
+- `regenerate-config.yml` did not read the `pruned` list from `changes.json` — now
+  tracked as a step output and included in the commit message and PR body summary
+- `regenerate-config.yml` PR body incorrectly stated packages were "pushed to `main`" —
+  corrected to `develop`
+
 
 ## [1.1.0] - 2026-05-16
 
