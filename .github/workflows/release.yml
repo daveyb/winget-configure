@@ -3,7 +3,7 @@ name: Release
 on:
   push:
     branches:
-      - main
+      - develop
     paths:
       - CHANGELOG.md
 
@@ -13,13 +13,13 @@ jobs:
     runs-on: ubuntu-latest
 
     permissions:
-      contents: write   # required to create releases and push tags
+      contents: write # required to create releases and push tags
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0   # full history so tags are available for comparison
+          fetch-depth: 0 # full history so tags are available for comparison
 
       - name: Parse CHANGELOG and manage releases
         env:
