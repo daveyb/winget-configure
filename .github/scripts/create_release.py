@@ -53,7 +53,7 @@ def parse_changelog(path: str = "CHANGELOG.md") -> tuple[str, list[tuple[str, st
 
     # --- Versioned sections --------------------------------------------------
     version_re = re.compile(
-        r"^## \[(\d+\.\d+\.\d+)\] - (\d{4}-\d{2}-\d{2})\s*\n(.*?)(?=^## \[|\Z)",
+        r"^## \[v?(\d+\.\d+\.\d+)\] - (\d{4}-\d{2}-\d{2})\s*\n(.*?)(?=^## \[|\Z)",
         re.MULTILINE | re.DOTALL,
     )
     versioned: list[tuple[str, str, str]] = [
@@ -148,7 +148,7 @@ def create_release(tag: str, title: str, notes: str, *, draft: bool = False) -> 
         "gh", "release", "create", tag,
         "--title", title,
         "--notes", notes,
-        "--target", "main",
+        "--target", os.environ.get("GITHUB_SHA", "develop"),
     ]
     if draft:
         cmd.append("--draft")

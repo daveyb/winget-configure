@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [v1.1.1] - 2026-05-16
+## [1.1.1] - 2026-05-16
 
 ### Added
 - GitHub releases (published and draft) now include `configuration.dsc.yaml` as a
@@ -20,6 +20,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   tracked as a step output and included in the commit message and PR body summary
 - `regenerate-config.yml` PR body incorrectly stated packages were "pushed to `main`" —
   corrected to `develop`
+- `release.yml` / `create_release.py` crashed with exit code 1 because `gh release create`
+  was called with `--target main`, but the repository has no `main` branch — now uses
+  `GITHUB_SHA` to target the exact triggering commit instead
+- `create_release.py` CHANGELOG parser silently skipped version entries with a `v` prefix
+  (e.g. `[v1.1.1]`) due to a strict regex — updated to tolerate an optional `v`
+- `actions/checkout@v4` updated to `v6` in both workflow files to resolve Node.js 20
+  deprecation warnings ahead of the June 2026 forced migration to Node.js 24
 
 
 ## [1.1.0] - 2026-05-16
