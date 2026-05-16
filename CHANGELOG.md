@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.2] - 2026-05-16
+
+### Removed
+- Pruned all stale `Absent` tombstones from `configuration.dsc.yaml`; the following
+  packages were previously tracked as `ensure: Absent` (enforcing uninstallation) and
+  are now completely removed from the configuration (no longer managed by winget DSC):
+  - Development: `Python.Python.3.10`, `Python.Launcher`,
+    `RubyInstallerTeam.RubyWithDevKit.3.4`, `Microsoft.VisualStudioCode`,
+    `Microsoft.VisualStudioCode.Insiders`, `Anysphere.Cursor`, `OpenAI.Codex`
+  - Containers: `Canonical.Ubuntu.2404`, `Canonical.Ubuntu.2204`
+  - Productivity: `PDFLabs.PDFtk.Free`, `FlorianHeidenreich.Mp3tag`
+  - Media: `HandBrake.HandBrake`, `LIGHTNINGUK.ImgBurn`, `Transmission.Transmission`,
+    `GOG.Galaxy`, `TASEmulators.BizHawk`
+  - Browsers: `eloston.ungoogled-chromium`
+  - Communication: `Element.Element`
+
 ## [1.1.1] - 2026-05-16
 
 ### Added
