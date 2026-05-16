@@ -67,7 +67,6 @@ packages:
 
   # ── Data science & ML ─────────────────────────────────────────────────────────
   data_science:
-    - ProjectJupyter.JupyterLab # JupyterLab notebook IDE
     - astral-sh.uv # uv – fast Python package manager
 
   # ── Browsers ──────────────────────────────────────────────────────────────────
