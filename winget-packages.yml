@@ -78,6 +78,7 @@ packages:
   communication:
     - Zoom.Zoom # Zoom video conferencing
     - Telegram.TelegramDesktop
+    - Element.Element
 
   # ── 3D printing ───────────────────────────────────────────────────────────────
   printing_3d:
