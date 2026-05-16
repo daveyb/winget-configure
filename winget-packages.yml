@@ -36,11 +36,12 @@ packages:
     - Derailed.k9s # k9s – Kubernetes TUI
     - Microsoft.FoundryLocal # Azure AI Foundry Local
 
-  # ── Containers & virtualisation ──────────────────────────────────────────────
+  # ── Containers & virtualization ──────────────────────────────────────────────
   containers_virtualization:
     - Microsoft.WSL # Windows Subsystem for Linux
     - LinuxContainers.Incus # Incus system container manager
     - SUSE.RancherDesktop # Rancher Desktop (containerd / k3s)
+    - Canonical.Ubuntu.2604 # Ubuntu 26.04 LTS (WSL distro)
 
   # ── Productivity ──────────────────────────────────────────────────────────────
   productivity:

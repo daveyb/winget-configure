@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.1.2] - 2026-05-16
 
+### Added
+- `Canonical.Ubuntu.2604` — Ubuntu 26.04 LTS (WSL distro) under Containers & virtualization
+- Renamed section header `Containers & virtualisation` → `Containers & virtualization`
+
 ### Removed
 - Pruned all stale `Absent` tombstones from `configuration.dsc.yaml`; the following
   packages were previously tracked as `ensure: Absent` (enforcing uninstallation) and
