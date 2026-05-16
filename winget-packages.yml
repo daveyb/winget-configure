@@ -62,7 +62,6 @@ packages:
     - GuinpinSoft.MakeMKV # MakeMKV disc ripper
     - Gyan.FFmpeg # FFmpeg multimedia framework
     - Valve.Steam # Steam gaming platform
-    - Libretro.RetroArch # RetroArch frontend for libretro
     - martinrotter.RSSGuard5
 
   # ── Data science & ML ─────────────────────────────────────────────────────────
