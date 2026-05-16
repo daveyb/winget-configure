@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - GitHub releases (published and draft) now include `configuration.dsc.yaml` as a
   downloadable asset, attached automatically by the release workflow
+- README instructions for applying winget configuration directly from release (without cloning repo)
 
 ### Fixed
 - `regenerate-config.yml` trigger branch was `main` — corrected to `develop` to match
