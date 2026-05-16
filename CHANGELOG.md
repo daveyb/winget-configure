@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.3] - 2026-05-16
+
+### Added
+- README Legacy Mode section now documents `-Thermonuclear` switch for bulk uninstallation
+  of all managed packages via `Install-Packages.ps1`
+
+### Fixed
+- `regenerate-config.yml` failed with `GitHub Actions is not permitted to create or approve
+  pull requests` — replaced PR-based approach with a direct commit and push to `develop`;
+  `[skip ci]` on the bot commit prevents cascading triggers into `release.yml`
+- `regenerate-config.yml` used `git add -A` when staging changes, which would accidentally
+  stage temp files (`changes.json`, `changelog_entry.md`) — replaced with targeted staging
+  of only `.configurations/configuration.dsc.yaml` and `CHANGELOG.md`
+- `regenerate-config.yml` and `release.yml` had no concurrency guard; added separate
+  `concurrency` groups (`regenerate-dsc` with `cancel-in-progress: true`, `release` with
+  `cancel-in-progress: false`) to prevent race conditions on combined pushes
+
 ## [1.1.2] - 2026-05-16
 
 ### Added

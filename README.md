@@ -163,7 +163,12 @@ Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 
 # Install a specific subset
 .\Install-Packages.ps1 -PackageList @("Git.Git", "GitHub.cli")
+
+# Uninstall ALL managed packages (destructive — removes every package in winget-packages.yml)
+.\Install-Packages.ps1 -Thermonuclear
 ```
+
+> **Warning:** `-Thermonuclear` calls `winget uninstall` on every package in `winget-packages.yml`. There is no confirmation prompt — it will uninstall everything immediately.
 
 Key differences from the recommended workflow:
 
