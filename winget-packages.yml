@@ -79,5 +79,3 @@ packages:
     - Element.Element
 
   # ── 3D printing ───────────────────────────────────────────────────────────────
-  printing_3d:
-    - Bambulab.Bambustudio # Bambu Studio slicer
