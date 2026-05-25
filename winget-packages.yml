@@ -26,6 +26,8 @@ packages:
     - JanDeDobbeleer.OhMyPosh # Oh My Posh prompt theme engine
     - OpenJS.NodeJS
     - Anthropic.ClaudeCode
+    - Google.Antigravity
+    - Google.AndroidStudio
 
   # ── Cloud & infrastructure ────────────────────────────────────────────────────
   cloud_infrastructure:
@@ -54,6 +56,7 @@ packages:
     - Proton.ProtonVPN # Proton VPN
     - Proton.ProtonDrive # Proton Drive
     - JAMSoftware.TreeSize.Free
+    - Google.GoogleDrive
 
   # ── Media & entertainment ─────────────────────────────────────────────────────
   media_entertainment:
@@ -71,6 +74,7 @@ packages:
   # ── Browsers ──────────────────────────────────────────────────────────────────
   browsers:
     - Mozilla.Firefox
+    - Google.Chrome
 
   # ── Communication ─────────────────────────────────────────────────────────────
   communication:
