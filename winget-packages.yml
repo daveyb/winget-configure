@@ -28,6 +28,7 @@ packages:
     - Anthropic.ClaudeCode
     - Google.Antigravity
     - Google.AndroidStudio
+    - Hashicorp.Terraform
 
   # ── Cloud & infrastructure ────────────────────────────────────────────────────
   cloud_infrastructure:
