@@ -29,6 +29,7 @@ packages:
     - Google.Antigravity
     - Google.AndroidStudio
     - Hashicorp.Terraform
+    - Hashicorp.TerraformLanguageServer
 
   # ── Cloud & infrastructure ────────────────────────────────────────────────────
   cloud_infrastructure:
