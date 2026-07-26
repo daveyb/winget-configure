@@ -1,11 +1,11 @@
 # Windows null device — created accidentally by shell redirects
+nul
 
 # Ignored directories for agents and AI tools
 .agents/
 .claude/
 .zed/
+.antigravitycli/
 agent-skills/
 skills-lock.json
-skills-lock.json
-nul
 .github/agents

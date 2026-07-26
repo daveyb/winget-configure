@@ -35,6 +35,16 @@ jobs:
             -CompareRef HEAD~1 `
             -ChangesOutputFile changes.json
 
+      - name: Validate generated DSC schema
+        shell: pwsh
+        run: |
+          winget configure validate -f .configurations/configuration.dsc.yaml --accept-configuration-agreements
+
+      - name: Validate package IDs exist in winget
+        shell: pwsh
+        run: |
+          .\.github\scripts\Test-PackageIds.ps1
+
       - name: Read changes
         id: changes
         shell: pwsh

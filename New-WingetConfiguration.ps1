@@ -1,58 +1,40 @@
-﻿#Requires -Version 5.1
+#Requires -Version 5.1
 <#
 .SYNOPSIS
     Generates a single winget-configure DSC YAML file from winget-packages.yml,
     tracking removals and pruning stale 'Absent' entries.
 
 .DESCRIPTION
-    This script reads the current `winget-packages.yml` and compares it against
-    a previous version of that SAME file in Git (configurable via -CompareRef, defaulting to HEAD).
+    Reads the current winget-packages.yml and compares it against a previous
+    version of that same file in Git (configurable via -CompareRef, default HEAD).
 
-    It then generates a `.configurations/configuration.dsc.yaml` file that reflects
-    the desired state:
+    Emits .configurations/configuration.dsc.yaml:
 
-    - Packages present in the current YAML are emitted with `ensure: Present`.
-    - Packages removed from the current YAML, but present in the previous (HEAD)
-      YAML, are kept as resources but emitted with `ensure: Absent`.
-    - If a package resource is already `ensure: Absent` in the existing DSC output,
-      AND that package is not present in the previous (HEAD) YAML, then the resource
-      is removed entirely from the generated DSC output.
-
-    This provides a clean lifecycle:
-      Present (in YAML) -> Absent tombstone (first commit after removal) -> pruned (next commit)
+    - Packages present in the current YAML get ensure: Present.
+    - Packages removed from the current YAML but present in the previous ref
+      are emitted with ensure: Absent (tombstone).
+    - Stale Absent entries (not in previous or current YAML) are pruned.
 
 .PARAMETER PackagesFile
-    Path to the source YAML file. Defaults to `winget-packages.yml` next to this script.
+    Path to the source YAML file. Defaults to winget-packages.yml next to this script.
 
 .PARAMETER OutputFile
-    Path to write the generated DSC YAML file. Defaults to `.configurations\configuration.dsc.yaml`
-    next to this script.
+    Path for the generated DSC YAML. Defaults to .configurations\configuration.dsc.yaml.
 
 .PARAMETER Force
     Overwrites the output file without prompting if it already exists.
 
 .PARAMETER CompareRef
-    The Git reference (e.g., HEAD, HEAD~1) to compare against. Defaults to 'HEAD'.
+    Git reference to compare against. Defaults to HEAD.
 
 .PARAMETER ChangesOutputFile
-    Optional path to write machine-readable JSON output of changes (added, removed, pruned).
-
-.EXAMPLE
-    .\New-WingetConfiguration.ps1
-    Generates `.configurations\configuration.dsc.yaml` from `winget-packages.yml`, comparing against Git HEAD.
+    Optional path for machine-readable JSON of changes (added, removed, pruned).
 
 .EXAMPLE
     .\New-WingetConfiguration.ps1 -Force
-    Regenerates the output file without prompting.
 
 .EXAMPLE
     .\New-WingetConfiguration.ps1 -Force -CompareRef HEAD~1 -ChangesOutputFile changes.json
-    CI mode: compares against parent commit, writes machine-readable change data.
-
-.NOTES
-    - Git must be installed and available on PATH for removal tracking.
-    - Comparison is case-sensitive (winget IDs are case-sensitive).
-    - Use -CompareRef HEAD~1 in CI where HEAD is already the current commit.
 #>
 
 [CmdletBinding(SupportsShouldProcess)]
@@ -67,24 +49,20 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-# ── Constants ─────────────────────────────────────────────────────────────────
-
-$DSC_SCHEMA_COMMENT = '# yaml-language-server: $schema=https://aka.ms/configuration-dsc-schema/0.2'
-$DSC_SCHEMA_VERSION = '0.2.0'
-
-# ── Output helpers ────────────────────────────────────────────────────────────
+Import-Module (Join-Path $PSScriptRoot 'helpers\PackagesYaml.psm1') -Force
+Import-Module (Join-Path $PSScriptRoot 'helpers\DscConfiguration.psm1') -Force
 
 function Write-Info
-{ param([string]$m) Write-Host $m -ForegroundColor Blue
-}
-function Write-Success
-{ param([string]$m) Write-Host $m -ForegroundColor Green
-}
-function Write-Warn
-{ param([string]$m) Write-Warning $m
+{
+    param([string]$Message)
+    Write-Host $Message -ForegroundColor Blue
 }
 
-# ── Path helpers (PowerShell 5.1 compatible) ─────────────────────────────────
+function Write-Success
+{
+    param([string]$Message)
+    Write-Host $Message -ForegroundColor Green
+}
 
 function Get-RelativePath
 {
@@ -94,20 +72,15 @@ function Get-RelativePath
         [Parameter(Mandatory)][string]$TargetPath
     )
 
-    $baseFull = (Resolve-Path -Path $BasePath).Path.TrimEnd('\') + '\'
-    $targetFull = (Resolve-Path -Path $TargetPath).Path
+    $baseFull = (Resolve-Path -LiteralPath $BasePath).Path.TrimEnd('\') + '\'
+    $targetFull = (Resolve-Path -LiteralPath $TargetPath).Path
 
     $baseUri = New-Object System.Uri($baseFull)
     $targetUri = New-Object System.Uri($targetFull)
-
     $relUri = $baseUri.MakeRelativeUri($targetUri)
     $rel = [System.Uri]::UnescapeDataString($relUri.ToString())
-
-    # Git wants forward slashes, but we also use it for display
     return $rel.Replace('/', '\')
 }
-
-# ── Git helpers ───────────────────────────────────────────────────────────────
 
 function Test-GitAvailable
 {
@@ -115,7 +88,8 @@ function Test-GitAvailable
     {
         $null = & git --version 2>$null
         return ($LASTEXITCODE -eq 0)
-    } catch
+    }
+    catch
     {
         return $false
     }
@@ -135,7 +109,8 @@ function Get-GitRepoRoot
         {
             return $root.Trim()
         }
-    } catch
+    }
+    catch
     {
     }
 
@@ -148,10 +123,9 @@ function Get-GitFileContentAtRef
     param(
         [Parameter(Mandatory)][string]$RepoRoot,
         [Parameter(Mandatory)][string]$RepoRelativePath,
-        [Parameter(Mandatory)][string]$Ref # e.g., 'HEAD', 'HEAD~1'
+        [Parameter(Mandatory)][string]$Ref
     )
 
-    # git show expects forward slashes
     $gitPath = $RepoRelativePath.Replace('\', '/')
     $spec = "${Ref}:${gitPath}"
 
@@ -162,7 +136,8 @@ function Get-GitFileContentAtRef
         {
             return $content
         }
-    } catch
+    }
+    catch
     {
         Write-Warning "Git command failed: $($_.Exception.Message)"
     }
@@ -170,254 +145,56 @@ function Get-GitFileContentAtRef
     return $null
 }
 
-# ── YAML parsing (winget-packages.yml subset) ─────────────────────────────────
-
-function Parse-PackagesYamlLines
+function Get-PreviousPackageEntries
 {
     [CmdletBinding()]
     param(
-        [AllowEmptyCollection()]
-        [string[]]$Lines = @()
+        [Parameter(Mandatory)][string]$PackagesFilePath,
+        [Parameter(Mandatory)][string]$Ref
     )
 
-    # Defensive check: if Lines is null or empty, return empty array immediately
-    if ($null -eq $Lines -or $Lines.Count -eq 0)
+    if (-not (Test-GitAvailable))
     {
-        Write-Verbose "Parse-PackagesYamlLines received null or empty Lines array. Returning empty."
+        Write-Warning 'Git is not available. Removed-package tracking will be skipped.'
         return @()
     }
 
-    $entries = New-Object System.Collections.Generic.List[hashtable]
-    $currentCategory = 'Uncategorised'
-    $inPackages = $false
-
-    foreach ($rawLine in $Lines)
+    $packagesDir = Split-Path -Parent (Resolve-Path -LiteralPath $PackagesFilePath).Path
+    $repoRoot = Get-GitRepoRoot -StartDirectory $packagesDir
+    if (-not $repoRoot)
     {
-        if ([string]::IsNullOrWhiteSpace($rawLine))
-        { continue
-        }
-
-        # Decorative headers like: "# ── Development tools & languages ─────────"
-        if ($rawLine -match '^\s*#\s*[^\w\s]+\s+(.+?)\s+[^\w\s]+\s*$')
-        {
-            $currentCategory = $Matches[1].Trim()
-            continue
-        }
-
-        # Other comments
-        if ($rawLine -match '^\s*#')
-        { continue
-        }
-
-        if ($rawLine -match '^\s*packages\s*:\s*$')
-        {
-            $inPackages = $true
-            continue
-        }
-
-        if (-not $inPackages)
-        { continue
-        }
-
-        # Category keys like "  development:" (we ignore; category comes from decorative comment)
-        if ($rawLine -match '^\s{2,}[\w-]+\s*:\s*$')
-        { continue
-        }
-
-        # Package list items like "    - Git.Git # comment"
-        if ($rawLine -match '^\s*-\s+([^\s#]+)(?:\s+#\s*(.*))?\s*$')
-        {
-            $id = $Matches[1].Trim()
-            $comment = ''
-            if ($Matches.Count -ge 3 -and $null -ne $Matches[2])
-            {
-                $comment = $Matches[2].Trim()
-            }
-
-            if (-not [string]::IsNullOrWhiteSpace($id))
-            {
-                $entries.Add(@{
-                        Id       = $id
-                        Category = $currentCategory
-                        Comment  = $comment
-                    })
-            }
-        }
-    }
-
-    return $entries
-}
-
-function Read-PackagesYaml
-{
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory)][string]$Path
-    )
-
-    if (-not (Test-Path $Path))
-    {
-        throw "Packages file not found: $Path"
-    }
-
-    $lines = Get-Content -Path $Path -Encoding UTF8
-
-    # Explicitly check for null or empty array from Get-Content
-    if ($lines -eq $null -or $lines.Length -eq 0)
-    {
-        Write-Warning "Packages file '$Path' returned no content (null or empty array). No packages will be processed."
+        Write-Warning 'Could not locate Git repo root. Removed-package tracking will be skipped.'
         return @()
     }
 
-    # Check if all lines are whitespace (this is a secondary check)
-    if ($lines -join '' -match '^\s*$')
+    $relPath = Get-RelativePath -BasePath $repoRoot -TargetPath (Resolve-Path -LiteralPath $PackagesFilePath).Path
+    $relForward = $relPath.Replace('\', '/')
+    Write-Info "Comparing against: ${Ref}:$relForward"
+
+    $prevContent = Get-GitFileContentAtRef -RepoRoot $repoRoot -RepoRelativePath $relPath -Ref $Ref
+    if ($null -eq $prevContent)
     {
-        Write-Warning "Packages file '$Path' contains only whitespace. No packages will be processed."
+        Write-Warning "Could not read previous file content from Git '$Ref'. Removed-package tracking will be skipped."
         return @()
     }
 
-    # If we have content, pass it to the parser
-    return Parse-PackagesYamlLines -Lines @($lines)
-}
-
-# ── DSC parsing (existing configuration.dsc.yaml) ─────────────────────────────
-
-function Read-DscEnsureMap
-{
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory)][string]$Path
-    )
-
-    $map = @{}
-    if (-not (Test-Path $Path))
-    { return $map # Return empty hash table if file doesn't exist
-    }
-
-    $lines = Get-Content -Path $Path -Encoding UTF8
-
-    # Defensive check for null or empty content from Get-Content
-    if ($lines -eq $null -or $lines.Length -eq 0)
+    $prevLines = @()
+    if ($prevContent -is [string])
     {
-        Write-Verbose "Read-DscEnsureMap: No content found in '$Path'."
-        return $map
+        $prevLines = $prevContent -split "`r?`n"
     }
-
-    $inBlock = $false
-    $blockId = $null
-    $blockEnsure = 'Present' # Default
-
-    $resourceStart = [regex]'^\s*-\s*resource:\s*Microsoft\.WinGet\.DSC/WinGetPackage\s*$'
-    $idRegex = [regex]'^\s*id:\s*(\S+)\s*$'
-    $ensureRegex = [regex]'^\s*ensure:\s*(\S+)\s*$'
-
-    foreach ($line in $lines)
+    else
     {
-        if ($resourceStart.IsMatch($line))
-        {
-            # Commit the prior block
-            if ($inBlock -and $blockId)
-            {
-                $map[$blockId] = $blockEnsure
-            }
-
-            # Start a new block
-            $inBlock = $true
-            $blockId = $null
-            $blockEnsure = 'Present'
-            continue
-        }
-
-        if (-not $inBlock)
-        { continue
-        }
-
-        $mId = $idRegex.Match($line)
-        if ($mId.Success)
-        {
-            $blockId = $mId.Groups[1].Value
-            continue
-        }
-
-        $mEnsure = $ensureRegex.Match($line)
-        if ($mEnsure.Success)
-        {
-            $blockEnsure = $mEnsure.Groups[1].Value
-            continue
-        }
+        $prevLines = [string[]]$prevContent
     }
 
-    # Commit final block
-    if ($inBlock -and $blockId)
+    if ($null -eq $prevLines -or $prevLines.Length -eq 0)
     {
-        $map[$blockId] = $blockEnsure
+        Write-Warning "Previous Git content for '$relPath' was empty. No previous packages loaded."
+        return @()
     }
 
-    return $map
-}
-
-# ── DSC YAML builder ──────────────────────────────────────────────────────────
-
-function Build-DscYaml
-{
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory)]
-        [System.Collections.Generic.List[hashtable]]$Entries,
-
-        [Parameter(Mandatory)]
-        [string]$SourceFile
-    )
-
-    $sb = New-Object System.Text.StringBuilder
-    $timestamp = (Get-Date).ToString('yyyy-MM-dd HH:mm')
-    $sourceLeaf = Split-Path $SourceFile -Leaf
-
-    $null = $sb.AppendLine($DSC_SCHEMA_COMMENT)
-    $null = $sb.AppendLine("# Generated by New-WingetConfiguration.ps1 on $timestamp")
-    $null = $sb.AppendLine("# Source of truth: $sourceLeaf  -- DO NOT EDIT MANUALLY")
-    $null = $sb.AppendLine('#')
-    $null = $sb.AppendLine('# Usage:')
-    $null = $sb.AppendLine('#   winget configure -f .configurations\configuration.dsc.yaml')
-    $null = $sb.AppendLine('')
-    $null = $sb.AppendLine('properties:')
-    $null = $sb.AppendLine("  configurationVersion: $DSC_SCHEMA_VERSION")
-    $null = $sb.AppendLine('  resources:')
-
-    $lastCategory = $null
-
-    foreach ($entry in $Entries)
-    {
-        if ($entry.Category -ne $lastCategory)
-        {
-            $null = $sb.AppendLine('')
-            $null = $sb.AppendLine("    # -- $($entry.Category) ----------------------------------------------------------------")
-            $lastCategory = $entry.Category
-        }
-
-        $desc = if ($entry.Comment -and $entry.Comment.Trim() -ne '')
-        { $entry.Comment
-        } else
-        { $entry.Id
-        }
-        $ensure = if ($entry.Ensure -and $entry.Ensure.Trim() -ne '')
-        { $entry.Ensure
-        } else
-        { 'Present'
-        }
-
-        $null = $sb.AppendLine('')
-        $null = $sb.AppendLine('    - resource: Microsoft.WinGet.DSC/WinGetPackage')
-        $null = $sb.AppendLine('      directives:')
-        $null = $sb.AppendLine("        description: $desc")
-        $null = $sb.AppendLine('        allowPrerelease: true')
-        $null = $sb.AppendLine('      settings:')
-        $null = $sb.AppendLine("        id: $($entry.Id)")
-        $null = $sb.AppendLine('        source: winget')
-        $null = $sb.AppendLine("        ensure: $ensure")
-    }
-
-    return $sb.ToString()
+    return @(Parse-PackagesYamlLines -Lines $prevLines)
 }
 
 # ── Main ──────────────────────────────────────────────────────────────────────
@@ -425,7 +202,6 @@ function Build-DscYaml
 Write-Host '=== WinGet Configuration Generator ===' -ForegroundColor Cyan
 Write-Host ''
 
-# Resolve default paths relative to this script's directory
 if ([string]::IsNullOrWhiteSpace($PackagesFile))
 {
     $PackagesFile = Join-Path $PSScriptRoot 'winget-packages.yml'
@@ -435,195 +211,59 @@ if ([string]::IsNullOrWhiteSpace($OutputFile))
     $OutputFile = Join-Path $PSScriptRoot '.configurations\configuration.dsc.yaml'
 }
 
-# Step 0: Parse current YAML
 Write-Info "Reading current packages from: $PackagesFile"
-$currentEntries = Read-PackagesYaml -Path $PackagesFile
+$currentEntries = @(Read-PackagesYaml -Path $PackagesFile)
 if ($currentEntries.Count -eq 0)
 {
-    # This warning is already handled within Read-PackagesYaml, but we'll throw here if it still returns empty.
     throw "No packages found or processed from '$PackagesFile'."
 }
 
-# Build current ID set (case-sensitive)
-$currentIds = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::Ordinal)
-foreach ($e in $currentEntries)
-{ $null = $currentIds.Add([string]$e.Id)
-}
-
-# Step 1: Load previous YAML (Git HEAD)
-$prevEntries = New-Object System.Collections.Generic.List[hashtable]
-$prevIds = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::Ordinal)
-
-$gitAvailable = Test-GitAvailable
-if (-not $gitAvailable)
-{
-    Write-Warn 'Git is not available. Removed-package tracking will be skipped.'
-} else
-{
-    $packagesDir = (Split-Path -Parent (Resolve-Path -Path $PackagesFile).Path)
-    $repoRoot = Get-GitRepoRoot -StartDirectory $packagesDir
-
-    if (-not $repoRoot)
-    {
-        Write-Warn "Could not locate Git repo root. Removed-package tracking will be skipped."
-    } else
-    {
-        $relPath = Get-RelativePath -BasePath $repoRoot -TargetPath (Resolve-Path -Path $PackagesFile).Path
-        Write-Info "Comparing against: ${CompareRef}:$($relPath.Replace('\','/'))"
-
-        $prevContent = Get-GitFileContentAtRef -RepoRoot $repoRoot -RepoRelativePath $relPath -Ref $CompareRef
-        if ($null -eq $prevContent)
-        {
-            Write-Warn "Could not read previous file content from Git '$CompareRef'. Removed-package tracking will be skipped."
-        } else
-        {
-            # PowerShell may return a single string or string[] depending on output
-            $prevLines = @()
-            if ($prevContent -is [string])
-            {
-                $prevLines = $prevContent -split "`r?`n"
-            } else
-            {
-                $prevLines = [string[]]$prevContent
-            }
-
-            # Ensure $prevLines is not null or empty before parsing
-            if ($prevLines -ne $null -and $prevLines.Length -gt 0)
-            {
-                $parsedPrev = Parse-PackagesYamlLines -Lines $prevLines
-                foreach ($p in $parsedPrev)
-                { $prevEntries.Add($p)
-                }
-
-                foreach ($p in $prevEntries)
-                { $null = $prevIds.Add([string]$p.Id)
-                }
-            } else
-            {
-                Write-Warning "Previous Git content for '$relPath' was empty or null after splitting lines. No previous packages loaded."
-            }
-        }
-    }
-}
-
-# Step 2: Read existing DSC ensures (for pruning stale Absent)
+$previousEntries = @(Get-PreviousPackageEntries -PackagesFilePath $PackagesFile -Ref $CompareRef)
 $existingEnsure = Read-DscEnsureMap -Path $OutputFile
 
-# Step 3: Determine removals and pruning
-$removedIds = New-Object 'System.Collections.Generic.List[string]'
-foreach ($id in $prevIds)
-{
-    if (-not $currentIds.Contains($id))
-    {
-        $removedIds.Add($id) | Out-Null
-    }
-}
+$lifecycle = Resolve-PackageLifecycle `
+    -CurrentEntries $currentEntries `
+    -PreviousEntries $previousEntries `
+    -ExistingEnsure $existingEnsure
 
-# Stale Absent pruning:
-# If existing has ensure: Absent, and the package is NOT in previous YAML (HEAD),
-# and NOT in current YAML (working tree), then remove it entirely.
-$prunedIds = New-Object 'System.Collections.Generic.List[string]'
-foreach ($kv in $existingEnsure.GetEnumerator())
-{
-    $id = [string]$kv.Key
-    $ensure = [string]$kv.Value
+$finalEntries = $lifecycle.FinalEntries
+$addedIds = $lifecycle.AddedIds
+$removedIds = $lifecycle.RemovedIds
+$prunedIds = $lifecycle.PrunedIds
 
-    if ($ensure -eq 'Absent' -and (-not $currentIds.Contains($id)) -and (-not $prevIds.Contains($id)))
-    {
-        $prunedIds.Add($id) | Out-Null
-    }
-}
-
-$prunedSet = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::Ordinal)
-foreach ($id in $prunedIds)
-{ $null = $prunedSet.Add($id)
-}
-
-# Step 4: Build desired entries list (stable order)
-$finalEntries = New-Object System.Collections.Generic.List[hashtable]
-
-# Present: in current YAML (in order)
-foreach ($e in $currentEntries)
-{
-    $finalEntries.Add(@{
-            Id       = $e.Id
-            Category = $e.Category
-            Comment  = $e.Comment
-            Ensure   = 'Present'
-        }) | Out-Null
-}
-
-# Absent tombstones: in prev YAML but removed now (in prev order)
-if ($removedIds.Count -gt 0)
-{
-    foreach ($e in $prevEntries)
-    {
-        $id = [string]$e.Id
-        if ($currentIds.Contains($id))
-        { continue
-        }
-        if (-not $prevIds.Contains($id))
-        { continue
-        } # defensive
-        if ($prunedSet.Contains($id))
-        { continue
-        }    # if somehow stale (shouldn't be), prune wins
-
-        $finalEntries.Add(@{
-                Id       = $e.Id
-                Category = $e.Category
-                Comment  = $e.Comment
-                Ensure   = 'Absent'
-            }) | Out-Null
-    }
-}
-
-# Step 5: Ensure output directory exists
 $outputDir = Split-Path $OutputFile -Parent
-if (-not (Test-Path $outputDir))
+if (-not (Test-Path -LiteralPath $outputDir))
 {
     Write-Info "Creating output directory: $outputDir"
     New-Item -ItemType Directory -Path $outputDir -Force | Out-Null
 }
 
-# Step 6: Guard against accidental overwrites
-if ((Test-Path $OutputFile) -and -not $Force)
+if ((Test-Path -LiteralPath $OutputFile) -and -not $Force)
 {
     $answer = Read-Host "Output file already exists: $OutputFile`nOverwrite? [y/N]"
     if ($answer -notmatch '^[Yy]')
     {
-        Write-Warn 'Aborted by user. Use -Force to suppress this prompt.'
+        Write-Warning 'Aborted by user. Use -Force to suppress this prompt.'
         exit 0
     }
 }
 
-# Step 7: Summary
-# Added IDs are current - previous
-$addedIds = New-Object 'System.Collections.Generic.List[string]'
-foreach ($id in $currentIds)
-{
-    if (-not $prevIds.Contains($id))
-    {
-        $addedIds.Add($id) | Out-Null
-    }
-}
-
 Write-Host ''
-Write-Host '=== Change Summary (vs Git HEAD) ===' -ForegroundColor Cyan
+Write-Host "=== Change Summary (vs Git $CompareRef) ===" -ForegroundColor Cyan
 Write-Host ("Current YAML packages : {0}" -f $currentEntries.Count) -ForegroundColor White
-if ($prevIds.Count -gt 0)
+if ($previousEntries.Count -gt 0)
 {
-    Write-Host ("Previous YAML packages: {0}" -f $prevIds.Count) -ForegroundColor White
-} else
+    Write-Host ("Previous YAML packages: {0}" -f $previousEntries.Count) -ForegroundColor White
+}
+else
 {
-    Write-Host "Previous YAML packages: (unknown / unavailable)" -ForegroundColor Yellow
+    Write-Host 'Previous YAML packages: (unknown / unavailable)' -ForegroundColor Yellow
 }
 Write-Host ("Added (Present)       : {0}" -f $addedIds.Count) -ForegroundColor Green
-Write-Host ("Removed -> Absent      : {0}" -f $removedIds.Count) -ForegroundColor Yellow
-Write-Host ("Pruned stale Absent    : {0}" -f $prunedIds.Count) -ForegroundColor Gray
+Write-Host ("Removed -> Absent     : {0}" -f $removedIds.Count) -ForegroundColor Yellow
+Write-Host ("Pruned stale Absent   : {0}" -f $prunedIds.Count) -ForegroundColor Gray
 Write-Host ''
 
-# Step 7b: Write machine-readable changes file (for CI consumption)
 if (-not [string]::IsNullOrWhiteSpace($ChangesOutputFile))
 {
     $changesData = @{
@@ -632,18 +272,32 @@ if (-not [string]::IsNullOrWhiteSpace($ChangesOutputFile))
         pruned  = @($prunedIds | ForEach-Object { $_.ToString() })
         total   = $finalEntries.Count
     }
-    $changesJson = $changesData | ConvertTo-Json -Depth 3
-    [System.IO.File]::WriteAllText($ChangesOutputFile, $changesJson, [System.Text.Encoding]::UTF8)
+    $changesJson = $changesData | ConvertTo-Json -Depth 5
+    [System.IO.File]::WriteAllText($ChangesOutputFile, $changesJson, [System.Text.UTF8Encoding]::new($false))
     Write-Success "Changes written to: $ChangesOutputFile"
 }
 
-# Step 8: Build and write the DSC YAML
 Write-Info 'Generating DSC YAML...'
-$yaml = Build-DscYaml -Entries $finalEntries -SourceFile $PackagesFile
+$yaml = Build-DscYaml -Entries @($finalEntries) -SourceFile $PackagesFile
 
-if ($PSCmdlet.ShouldProcess($OutputFile, 'Write DSC configuration'))
+# Skip write when content is unchanged (stable output, no timestamp noise)
+$shouldWrite = $true
+if (Test-Path -LiteralPath $OutputFile)
 {
-    [System.IO.File]::WriteAllText($OutputFile, $yaml, [System.Text.Encoding]::UTF8)
+    $existing = [System.IO.File]::ReadAllText($OutputFile)
+    # Normalize line endings for comparison
+    $existingNorm = $existing -replace "`r`n", "`n"
+    $yamlNorm = $yaml -replace "`r`n", "`n"
+    if ($existingNorm -eq $yamlNorm)
+    {
+        $shouldWrite = $false
+        Write-Success "No content changes: $OutputFile"
+    }
+}
+
+if ($shouldWrite -and $PSCmdlet.ShouldProcess($OutputFile, 'Write DSC configuration'))
+{
+    [System.IO.File]::WriteAllText($OutputFile, $yaml, [System.Text.UTF8Encoding]::new($false))
     Write-Success "Written to: $OutputFile"
 }
 

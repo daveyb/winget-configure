@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- Shared modules: `helpers/PackagesYaml.psm1`, `helpers/DscConfiguration.psm1`, `helpers/WingetBootstrap.psm1`
+- Pester unit tests under `tests/`
+- CI package-ID validation via `.github/scripts/Test-PackageIds.ps1`
+- MIT `LICENSE` file
+- `@prerelease` comment opt-in for per-package `allowPrerelease`
+
+### Changed
+- Generator produces stable DSC output (no wall-clock timestamp; skip write when unchanged)
+- DSC resources default to `allowPrerelease: false`
+- Consolidated winget bootstrap helpers into one side-effect-free module
+- `-Thermonuclear` requires typing `yes` (or `-Force`) before uninstalling
+- README prerequisites and legacy-mode docs aligned with actual behaviour
+- Release SemVer inference: `### Breaking` bumps major; package `### Removed` is patch-level
+- Validate workflow runs unit tests and broader path filters; regenerate validates DSC + package IDs
+
+### Removed
+- `helpers/Enable-Winget.psm1`, `helpers/Ensure-Winget.psm1`, `helpers/Test-WingetEnabled.psm1` (replaced by `WingetBootstrap.psm1`)
+
 ## [1.1.12] - 2026-07-25
 
 ### Added

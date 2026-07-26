@@ -18,19 +18,19 @@ packages:
     - Git.Git # Git version control
     - GitHub.cli # GitHub CLI (gh)
     - GitHub.Copilot # GitHub Copilot CLI extension
-    - GitHub.CopilotApp
+    - GitHub.CopilotApp # GitHub Copilot desktop app
     - GoLang.Go # Go programming language
-    - Python.Python.3.14 # Python 3.14
+    - Python.Python.3.14 # Python 3.14 (pinned minor — bump intentionally)
     - ZedIndustries.Zed # Zed code editor
     - Microsoft.PowerShell # PowerShell 7+
     - Microsoft.WindowsTerminal # Windows Terminal
     - JanDeDobbeleer.OhMyPosh # Oh My Posh prompt theme engine
-    - OpenJS.NodeJS
-    - Anthropic.ClaudeCode
-    - Google.Antigravity
+    - OpenJS.NodeJS # Node.js JavaScript runtime
+    - Anthropic.ClaudeCode # Claude Code CLI
+    - Google.Antigravity # Google Antigravity
     - xAI.GrokBuild # Grok Build CLI agent
-    - Google.AndroidStudio
-    - Hashicorp.TerraformLanguageServer
+    - Google.AndroidStudio # Android Studio IDE
+    - Hashicorp.TerraformLanguageServer # Terraform language server
 
   # ── Cloud & infrastructure ────────────────────────────────────────────────────
   cloud_infrastructure:
@@ -57,8 +57,8 @@ packages:
     - calibre.calibre # Calibre e-book manager
     - Tailscale.Tailscale # Tailscale VPN mesh
     - Proton.ProtonVPN # Proton VPN
-    - JAMSoftware.TreeSize.Free
-    - Google.GoogleDrive
+    - JAMSoftware.TreeSize.Free # TreeSize Free disk usage
+    - Google.GoogleDrive # Google Drive
 
   # ── Media & entertainment ─────────────────────────────────────────────────────
   media_entertainment:
@@ -67,7 +67,7 @@ packages:
     - GuinpinSoft.MakeMKV # MakeMKV disc ripper
     - Gyan.FFmpeg # FFmpeg multimedia framework
     - Valve.Steam # Steam gaming platform
-    - martinrotter.RSSGuard5
+    - martinrotter.RSSGuard5 # RSS Guard feed reader
 
   # ── Data science & ML ─────────────────────────────────────────────────────────
   data_science:
@@ -75,17 +75,15 @@ packages:
 
   # ── Browsers ──────────────────────────────────────────────────────────────────
   browsers:
-    - Mozilla.Firefox
-    - Google.Chrome
+    - Mozilla.Firefox # Mozilla Firefox
+    - Google.Chrome # Google Chrome
 
   # ── Communication ─────────────────────────────────────────────────────────────
   communication:
     - Zoom.Zoom # Zoom video conferencing
-    - Telegram.TelegramDesktop
-    - Element.Element
-
-  # ── 3D printing ───────────────────────────────────────────────────────────────
+    - Telegram.TelegramDesktop # Telegram desktop client
+    - Element.Element # Element Matrix client
 
   # ── Security ───────────────────────────────────────────────────────────────────
   security:
-    - Proton.ProtonPass.CLI
+    - Proton.ProtonPass.CLI # Proton Pass CLI

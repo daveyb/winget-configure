@@ -12,10 +12,10 @@ Behaviour on each run:
                           fresh draft tagged  v<version>-draft-<YYYYMMDD-HHmm>.
 
 SemVer inference from [Unreleased] change types (keepachangelog.com):
-  ### Removed             → MAJOR bump  (breaking)
+  ### Breaking            → MAJOR bump  (breaking API / behaviour)
   ### Added / Deprecated  → MINOR bump  (new functionality)
   ### Fixed / Changed /
-  ### Security            → PATCH bump  (bug fixes / maintenance)
+  ### Removed / Security  → PATCH bump  (package-list removals are not API breaks)
   Highest priority wins (MAJOR > MINOR > PATCH).
 """
 
@@ -68,7 +68,7 @@ def infer_next_version(current_version: str, unreleased_content: str) -> str:
     """Infer the next SemVer from the change-type headings in *unreleased_content*."""
     major, minor, patch = map(int, current_version.split("."))
 
-    has_major = bool(re.search(r"^### Removed", unreleased_content, re.MULTILINE))
+    has_major = bool(re.search(r"^### Breaking", unreleased_content, re.MULTILINE))
     has_minor = bool(re.search(r"^### (?:Added|Deprecated)", unreleased_content, re.MULTILINE))
 
     if has_major:
@@ -139,7 +139,7 @@ DSC_CONFIG_ASSET = ".configurations/configuration.dsc.yaml"
 
 
 def create_release(tag: str, title: str, notes: str, *, draft: bool = False) -> None:
-    """Create a GitHub release (and its git tag) targeting ``main``.
+    """Create a GitHub release (and its git tag) targeting the commit SHA or develop.
 
     Automatically attaches ``.configurations/configuration.dsc.yaml`` as a
     release asset when the file is present in the working tree.

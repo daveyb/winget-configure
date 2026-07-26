@@ -6,7 +6,23 @@ on:
     paths:
       - 'winget-packages.yml'
       - 'New-WingetConfiguration.ps1'
+      - 'Install-Packages.ps1'
+      - 'helpers/**'
+      - '.configurations/**'
+      - 'tests/**'
       - '.github/workflows/validate-config.yml'
+      - '.github/scripts/Test-PackageIds.ps1'
+  push:
+    branches: [ develop ]
+    paths:
+      - 'winget-packages.yml'
+      - 'New-WingetConfiguration.ps1'
+      - 'Install-Packages.ps1'
+      - 'helpers/**'
+      - '.configurations/**'
+      - 'tests/**'
+      - '.github/workflows/validate-config.yml'
+      - '.github/scripts/Test-PackageIds.ps1'
   workflow_dispatch:
 
 concurrency:
@@ -21,6 +37,21 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
+
+      - name: Install Pester
+        shell: pwsh
+        run: |
+          Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
+          Install-Module -Name Pester -MinimumVersion 5.0.0 -Force -Scope CurrentUser -SkipPublisherCheck
+
+      - name: Run unit tests
+        shell: pwsh
+        run: |
+          $config = New-PesterConfiguration
+          $config.Run.Path = './tests'
+          $config.Run.Exit = $true
+          $config.Output.Verbosity = 'Detailed'
+          Invoke-Pester -Configuration $config
 
       - name: Generate configuration.dsc.yaml
         shell: pwsh
@@ -42,6 +73,11 @@ jobs:
         shell: pwsh
         run: |
           winget configure validate -f .configurations/configuration.dsc.yaml --accept-configuration-agreements
+
+      - name: Validate package IDs exist in winget
+        shell: pwsh
+        run: |
+          .\.github\scripts\Test-PackageIds.ps1
 
       - name: Test Configuration Resolution (Dry-Run)
         shell: pwsh
