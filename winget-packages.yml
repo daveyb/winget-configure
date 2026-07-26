@@ -28,8 +28,8 @@ packages:
     - OpenJS.NodeJS
     - Anthropic.ClaudeCode
     - Google.Antigravity
+    - xAI.GrokBuild # Grok Build CLI agent
     - Google.AndroidStudio
-    - Hashicorp.Terraform
     - Hashicorp.TerraformLanguageServer
 
   # ── Cloud & infrastructure ────────────────────────────────────────────────────

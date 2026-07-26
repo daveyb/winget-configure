@@ -1,0 +1,49 @@
+name: Validate WinGet Configuration
+
+on:
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - 'winget-packages.yml'
+      - 'New-WingetConfiguration.ps1'
+      - '.github/workflows/validate-config.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: validate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Validate DSC Configuration
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Generate configuration.dsc.yaml
+        shell: pwsh
+        run: |
+          .\New-WingetConfiguration.ps1 -Force
+
+      - name: Install WinGet DSC PowerShell Module
+        shell: pwsh
+        run: |
+          $Module = Get-Module -ListAvailable -Name Microsoft.WinGet.DSC
+          if (-not $Module) {
+            Write-Host "Installing Microsoft.WinGet.DSC module..."
+            Install-Module -Name Microsoft.WinGet.DSC -Force -Scope CurrentUser -AllowClobber
+          } else {
+            Write-Host "Microsoft.WinGet.DSC module is already installed."
+          }
+
+      - name: Validate Configuration Schema
+        shell: pwsh
+        run: |
+          winget configure validate -f .configurations/configuration.dsc.yaml --accept-configuration-agreements
+
+      - name: Test Configuration Resolution (Dry-Run)
+        shell: pwsh
+        run: |
+          winget configure test -f .configurations/configuration.dsc.yaml --accept-configuration-agreements --accept-source-agreements
