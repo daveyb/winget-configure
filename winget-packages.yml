@@ -67,6 +67,7 @@ packages:
     - GuinpinSoft.MakeMKV # MakeMKV disc ripper
     - Gyan.FFmpeg # FFmpeg multimedia framework
     - Valve.Steam # Steam gaming platform
+    - GOG.Galaxy
     - martinrotter.RSSGuard5
 
   # ── Data science & ML ─────────────────────────────────────────────────────────
