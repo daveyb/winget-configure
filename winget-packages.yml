@@ -59,6 +59,7 @@ packages:
     - Proton.ProtonVPN # Proton VPN
     - JAMSoftware.TreeSize.Free
     - Google.GoogleDrive
+    - JGraph.Draw # Draw.io diagramming tool
 
   # ── Media & entertainment ─────────────────────────────────────────────────────
   media_entertainment:
