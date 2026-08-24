@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - `MoonlightGameStreamingProject.Moonlight` to `media` category
 
+### Fixed
+- `validate-config.yml` passed `--accept-configuration-agreements` to `winget configure validate`, which winget 1.11 does not accept on that subcommand
+
 ## [1.1.14] - 2026-08-03
 
 ### Added
