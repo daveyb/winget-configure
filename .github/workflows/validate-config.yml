@@ -51,14 +51,16 @@ jobs:
           $ErrorActionPreference = 'Continue'
           $PSNativeCommandUseErrorActionPreference = $false
 
-          & winget configure test -f .configurations/configuration.dsc.yaml --accept-configuration-agreements --disable-interactivity
+          $output = & winget configure test -f .configurations/configuration.dsc.yaml --accept-configuration-agreements --disable-interactivity 2>&1
           $code = $LASTEXITCODE
+          $output | ForEach-Object { Write-Host $_ }
+          $text = ($output | Out-String)
 
-          # 0 = runner already matches desired state
-          # -1978286065 / 2316787727 = WINGET_CONFIG_ERROR_TEST_FAILED
-          #   (config resolved; packages are not installed on a clean CI runner)
-          $okCodes = @(0, -1978286065, 2316787727)
-          if ($okCodes -contains $code) {
+          # configure test exits 1 (or WINGET_CONFIG_ERROR_TEST_FAILED) when the
+          # runner is not fully configured. That is expected in CI as long as
+          # the configuration itself resolved.
+          $resolved = $text -match 'System is (not )?in the described configuration state'
+          if ($code -eq 0 -or $resolved) {
             Write-Host "Configuration resolved successfully (exit $code)"
             exit 0
           }
