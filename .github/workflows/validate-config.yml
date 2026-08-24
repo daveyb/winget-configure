@@ -41,9 +41,29 @@ jobs:
       - name: Validate Configuration Schema
         shell: pwsh
         run: |
-          winget configure validate -f .configurations/configuration.dsc.yaml --accept-configuration-agreements
+          # `configure validate` does not accept --accept-configuration-agreements
+          # (that flag belongs to `configure` / `configure test` only).
+          winget configure validate -f .configurations/configuration.dsc.yaml --disable-interactivity
 
       - name: Test Configuration Resolution (Dry-Run)
         shell: pwsh
         run: |
-          winget configure test -f .configurations/configuration.dsc.yaml --accept-configuration-agreements --accept-source-agreements
+          $ErrorActionPreference = 'Continue'
+          $PSNativeCommandUseErrorActionPreference = $false
+
+          $output = & winget configure test -f .configurations/configuration.dsc.yaml --accept-configuration-agreements --disable-interactivity 2>&1
+          $code = $LASTEXITCODE
+          $output | ForEach-Object { Write-Host $_ }
+          $text = ($output | Out-String)
+
+          # configure test exits 1 (or WINGET_CONFIG_ERROR_TEST_FAILED) when the
+          # runner is not fully configured. That is expected in CI as long as
+          # the configuration itself resolved.
+          $resolved = $text -match 'System is (not )?in the described configuration state'
+          if ($code -eq 0 -or $resolved) {
+            Write-Host "Configuration resolved successfully (exit $code)"
+            exit 0
+          }
+
+          Write-Error "winget configure test failed with exit code $code"
+          exit $code

@@ -70,6 +70,7 @@ packages:
     - Valve.Steam # Steam gaming platform
     - GOG.Galaxy
     - martinrotter.RSSGuard5
+    - MoonlightGameStreamingProject.Moonlight # Moonlight game streaming client
 
   # ── Data science & ML ─────────────────────────────────────────────────────────
   data_science:
