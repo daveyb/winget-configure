@@ -396,7 +396,11 @@ $ver = ""
 $pinned = $false
 try {
     $wsl = Join-Path $env:SystemRoot "System32\wsl.exe"
-    if (Test-Path -LiteralPath $wsl) {
+    if (-not (Test-Path -LiteralPath $wsl)) {
+        $cmd = Get-Command -Name "wsl.exe" -ErrorAction SilentlyContinue
+        if ($cmd -and $cmd.Source) { $wsl = [string]$cmd.Source } else { $wsl = $null }
+    }
+    if ($wsl) {
         $out = (& $wsl --version 2>&1 | Out-String) -replace "`0", ""
         if ($out -match "WSL version:\s*(\S+)") { $ver = $Matches[1] }
     }
@@ -414,7 +418,11 @@ function Get-WslUpdateTestScript
 $ErrorActionPreference = "Continue"
 try {
     $wsl = Join-Path $env:SystemRoot "System32\wsl.exe"
-    if (-not (Test-Path -LiteralPath $wsl)) { return $false }
+    if (-not (Test-Path -LiteralPath $wsl)) {
+        $cmd = Get-Command -Name "wsl.exe" -ErrorAction SilentlyContinue
+        if ($cmd -and $cmd.Source) { $wsl = [string]$cmd.Source } else { $wsl = $null }
+    }
+    if (-not $wsl) { return $false }
     $pins = & winget pin list --disable-interactivity 2>&1 | Out-String
     if ($pins -notmatch '\bMicrosoft\.WSL\b') { return $false }
     return $true
@@ -430,16 +438,17 @@ function Get-WslUpdateSetScript
 $ErrorActionPreference = "Stop"
 $wsl = Join-Path $env:SystemRoot "System32\wsl.exe"
 if (-not (Test-Path -LiteralPath $wsl)) {
-    throw "wsl.exe was not found under System32"
+    $cmd = Get-Command -Name "wsl.exe" -ErrorAction SilentlyContinue
+    if ($cmd -and $cmd.Source) { $wsl = [string]$cmd.Source } else { $wsl = $null }
 }
-$verOut = (& $wsl --version 2>&1 | Out-String) -replace "`0", ""
-if ($verOut -notmatch "WSL version:\s*\S+") {
-    $null = & $wsl --update --web-download 2>&1
+if (-not $wsl) {
+    $wsl = "wsl.exe"
+}
+$null = & $wsl --update --web-download 2>&1
+if ($LASTEXITCODE -ne 0) {
+    $null = & $wsl --install --no-distribution --web-download 2>&1
     if ($LASTEXITCODE -ne 0) {
-        $null = & $wsl --install --no-distribution --web-download 2>&1
-        if ($LASTEXITCODE -ne 0) {
-            throw "WSL web-download failed with exit $LASTEXITCODE"
-        }
+        throw "WSL web-download failed with exit $LASTEXITCODE"
     }
 }
 $pins = & winget pin list --disable-interactivity 2>&1 | Out-String
