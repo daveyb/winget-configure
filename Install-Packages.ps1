@@ -300,7 +300,7 @@ function Install-WingetPackage
             {
                 $result.Message = 'Package not found in winget repository'
                 Write-ProgressWarning "    └─ Package not found in repository" -Quiet:$Quiet
-            } elseif ($output -match 'requires admin privileges')
+            } elseif (($output -match '0x80073d28') -or ($output -match 'administrator privileges are required') -or ($output -match 'requires admin privileges'))
             {
                 $result.Message = 'Requires administrator privileges'
                 Write-ProgressWarning "    └─ Administrator privileges required" -Quiet:$Quiet
@@ -322,6 +322,7 @@ Write-Host ''
 
 # Step 0: Resolve the winget helper module
 $helperPath = Join-Path $PSScriptRoot 'helpers\Ensure-Winget.psm1'
+$wslHelperPath = Join-Path $PSScriptRoot 'helpers\Update-Wsl.psm1'
 
 if (-not (Test-Path $helperPath))
 {
@@ -331,6 +332,10 @@ if (-not (Test-Path $helperPath))
 }
 
 Import-Module $helperPath -Force
+if (Test-Path -LiteralPath $wslHelperPath)
+{
+    Import-Module $wslHelperPath -Force
+}
 
 # Step 1: Build the package list ──────────────────────────────────────────────
 #
@@ -399,7 +404,33 @@ foreach ($package in $PackageList)
         $result = Uninstall-WingetPackage -PackageId $package -Quiet:$Quiet
     } else
     {
-        $result = Install-WingetPackage -PackageId $package -Force:$Force -Quiet:$Quiet
+        if (($package -eq 'Microsoft.WSL') -and (Get-Command -Name Update-Wsl -ErrorAction SilentlyContinue))
+        {
+            # Skip winget: a blocking Microsoft.WSL pin makes install/upgrade
+            # fail with a pin error (not 0x80073d28), so the old fallback
+            # never ran. Match winget configure: always use Update-Wsl.
+            Write-ProgressInfo "Processing package: $package" -Quiet:$Quiet
+            Write-ProgressInfo "  └─ Skipping winget; using wsl --update --web-download" -Quiet:$Quiet
+            $wslResult = Update-Wsl -Quiet:$Quiet
+            $result = @{
+                PackageId        = $package
+                Success          = [bool]$wslResult.Success
+                Message          = [string]$wslResult.Message
+                AlreadyInstalled = $false
+            }
+            if ($result.Success)
+            {
+                Write-ProgressSuccess "  └─ ✓ WSL via web-download" -Quiet:$Quiet
+            }
+            else
+            {
+                Write-ProgressWarning "  └─ ✗ WSL web-download failed" -Quiet:$Quiet
+            }
+        }
+        else
+        {
+            $result = Install-WingetPackage -PackageId $package -Force:$Force -Quiet:$Quiet
+        }
     }
     $results += $result
 
