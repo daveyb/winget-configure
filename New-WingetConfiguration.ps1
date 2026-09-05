@@ -362,8 +362,8 @@ function Read-DscEnsureMap
 # privileges are required. Do not emit WinGetPackage for Present (that resource
 # can abort `winget configure` before the Script runs). Use a Script resource
 # that installs/updates via `wsl --update --web-download` and pins Microsoft.WSL
-# so `winget upgrade --all` skips the broken path. Absent still uses WinGetPackage
-# plus an unpin Script.
+# so `winget upgrade --all` skips the broken path. Absent unpins first, then
+# emits WinGetPackage Absent (a blocking pin can make uninstall fail).
 
 $WSL_PACKAGE_ID = 'Microsoft.WSL'
 
@@ -422,7 +422,16 @@ try {
         $cmd = Get-Command -Name "wsl.exe" -ErrorAction SilentlyContinue
         if ($cmd -and $cmd.Source) { $wsl = [string]$cmd.Source } else { $wsl = $null }
     }
-    if (-not $wsl) { return $false }
+    $ver = ""
+    if ($wsl) {
+        $saved = $ErrorActionPreference
+        $ErrorActionPreference = "SilentlyContinue"
+        $out = (& $wsl --version 2>&1 | Out-String) -replace "`0", ""
+        $ErrorActionPreference = $saved
+        if ($out -match "WSL version:\s*(\S+)") { $ver = $Matches[1] }
+    }
+    # Inbox System32\wsl.exe is a stub; require a real `WSL version:` line.
+    if (-not $ver) { return $false }
     $pins = & winget pin list --disable-interactivity 2>&1 | Out-String
     if ($pins -notmatch '\bMicrosoft\.WSL\b') { return $false }
     return $true
@@ -441,13 +450,22 @@ if (-not (Test-Path -LiteralPath $wsl)) {
     $cmd = Get-Command -Name "wsl.exe" -ErrorAction SilentlyContinue
     if ($cmd -and $cmd.Source) { $wsl = [string]$cmd.Source } else { $wsl = $null }
 }
-$wslPresent = [bool]$wsl
+$ver = ""
+if ($wsl) {
+    $saved = $ErrorActionPreference
+    $ErrorActionPreference = "SilentlyContinue"
+    $out = (& $wsl --version 2>&1 | Out-String) -replace "`0", ""
+    $ErrorActionPreference = $saved
+    if ($out -match "WSL version:\s*(\S+)") { $ver = $Matches[1] }
+}
 if (-not $wsl) {
     $wsl = "wsl.exe"
 }
 # Native stderr + Stop in Windows PowerShell 5.1 becomes NativeCommandError.
-# Only (re)install when wsl.exe is missing; a later pin retry must not restart WSL.
-if (-not $wslPresent) {
+# Inbox System32\wsl.exe is a stub. Web-download only when `wsl --version`
+# does not report `WSL version:`. If WSL is installed and only the pin is
+# missing, pin only so later configure does not restart WSL.
+if (-not $ver) {
     $saved = $ErrorActionPreference
     $ErrorActionPreference = "SilentlyContinue"
     $null = & $wsl --update --web-download 2>&1
@@ -584,18 +602,7 @@ function Build-DscYaml
         }
 
         $isWslPresent = ($entry.Id -eq $WSL_PACKAGE_ID -and $ensure -eq 'Present')
-        if (-not $isWslPresent)
-        {
-            $null = $sb.AppendLine('')
-            $null = $sb.AppendLine('    - resource: Microsoft.WinGet.DSC/WinGetPackage')
-            $null = $sb.AppendLine('      directives:')
-            $null = $sb.AppendLine("        description: $desc")
-            $null = $sb.AppendLine('        allowPrerelease: true')
-            $null = $sb.AppendLine('      settings:')
-            $null = $sb.AppendLine("        id: $($entry.Id)")
-            $null = $sb.AppendLine('        source: winget')
-            $null = $sb.AppendLine("        ensure: $ensure")
-        }
+        $isWslAbsent = ($entry.Id -eq $WSL_PACKAGE_ID -and $ensure -eq 'Absent')
 
         if ($isWslPresent)
         {
@@ -605,16 +612,29 @@ function Build-DscYaml
                 -GetScript (Get-WslUpdateGetScript) `
                 -TestScript (Get-WslUpdateTestScript) `
                 -SetScript (Get-WslUpdateSetScript)
+            continue
         }
-        elseif ($entry.Id -eq $WSL_PACKAGE_ID -and $ensure -eq 'Absent')
+
+        if ($isWslAbsent)
         {
+            # Unpin first: a blocking pin can make WinGetPackage Absent fail.
             Add-WslScriptResource -Builder $sb `
                 -ResourceId 'Microsoft.WSL.Unpin' `
-                -Description 'Remove the Microsoft.WSL winget pin after uninstall' `
+                -Description 'Remove the Microsoft.WSL winget pin before uninstall' `
                 -GetScript (Get-WslUnpinGetScript) `
                 -TestScript (Get-WslUnpinTestScript) `
                 -SetScript (Get-WslUnpinSetScript)
         }
+
+        $null = $sb.AppendLine('')
+        $null = $sb.AppendLine('    - resource: Microsoft.WinGet.DSC/WinGetPackage')
+        $null = $sb.AppendLine('      directives:')
+        $null = $sb.AppendLine("        description: $desc")
+        $null = $sb.AppendLine('        allowPrerelease: true')
+        $null = $sb.AppendLine('      settings:')
+        $null = $sb.AppendLine("        id: $($entry.Id)")
+        $null = $sb.AppendLine('        source: winget')
+        $null = $sb.AppendLine("        ensure: $ensure")
     }
 
     return $sb.ToString()

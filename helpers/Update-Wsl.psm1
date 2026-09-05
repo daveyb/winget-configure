@@ -179,6 +179,9 @@ function Update-Wsl
         Version = ''
     }
 
+    # Always refresh (used by Update-Packages.ps1). DSC SetScript only
+    # web-downloads when Get-InstalledWslVersion is empty so configure
+    # does not restart WSL on a pin-only retry.
     $wsl = Get-WslExePath
     if (-not $wsl)
     {

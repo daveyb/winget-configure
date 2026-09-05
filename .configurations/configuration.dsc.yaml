@@ -255,7 +255,16 @@ properties:
                   $cmd = Get-Command -Name "wsl.exe" -ErrorAction SilentlyContinue
                   if ($cmd -and $cmd.Source) { $wsl = [string]$cmd.Source } else { $wsl = $null }
               }
-              if (-not $wsl) { return $false }
+              $ver = ""
+              if ($wsl) {
+                  $saved = $ErrorActionPreference
+                  $ErrorActionPreference = "SilentlyContinue"
+                  $out = (& $wsl --version 2>&1 | Out-String) -replace "`0", ""
+                  $ErrorActionPreference = $saved
+                  if ($out -match "WSL version:\s*(\S+)") { $ver = $Matches[1] }
+              }
+              # Inbox System32\wsl.exe is a stub; require a real `WSL version:` line.
+              if (-not $ver) { return $false }
               $pins = & winget pin list --disable-interactivity 2>&1 | Out-String
               if ($pins -notmatch '\bMicrosoft\.WSL\b') { return $false }
               return $true
@@ -269,13 +278,22 @@ properties:
               $cmd = Get-Command -Name "wsl.exe" -ErrorAction SilentlyContinue
               if ($cmd -and $cmd.Source) { $wsl = [string]$cmd.Source } else { $wsl = $null }
           }
-          $wslPresent = [bool]$wsl
+          $ver = ""
+          if ($wsl) {
+              $saved = $ErrorActionPreference
+              $ErrorActionPreference = "SilentlyContinue"
+              $out = (& $wsl --version 2>&1 | Out-String) -replace "`0", ""
+              $ErrorActionPreference = $saved
+              if ($out -match "WSL version:\s*(\S+)") { $ver = $Matches[1] }
+          }
           if (-not $wsl) {
               $wsl = "wsl.exe"
           }
           # Native stderr + Stop in Windows PowerShell 5.1 becomes NativeCommandError.
-          # Only (re)install when wsl.exe is missing; a later pin retry must not restart WSL.
-          if (-not $wslPresent) {
+          # Inbox System32\wsl.exe is a stub. Web-download only when `wsl --version`
+          # does not report `WSL version:`. If WSL is installed and only the pin is
+          # missing, pin only so later configure does not restart WSL.
+          if (-not $ver) {
               $saved = $ErrorActionPreference
               $ErrorActionPreference = "SilentlyContinue"
               $null = & $wsl --update --web-download 2>&1

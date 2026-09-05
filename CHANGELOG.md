@@ -13,8 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - `Microsoft.WSL` upgrades no longer depend on `winget upgrade`, which fails with `0x80073d28` when administrator privileges are required
-- DSC `TestScript` for WSL is local-only (`wsl.exe` present plus a blocking `Microsoft.WSL` pin); it no longer calls `api.github.com`. Later `winget configure` runs therefore do not restart WSL.
-- When Test fails because `wsl.exe` is missing, `SetScript` runs `wsl --update --web-download` (then `--install` if needed) and discovers `wsl.exe` via `Get-Command` when System32 is missing (WOW64). Native `wsl`/`winget` calls use `SilentlyContinue` and `$LASTEXITCODE` so Windows PowerShell 5.1 does not treat stderr as a terminating error. If WSL is already installed, Set only retries the pin (no second `--update`). Pin add failure does not fail Set. Keep WSL current after bootstrap with `Update-Packages.ps1`.
+- DSC `TestScript` for WSL is local-only: a real `wsl --version` `WSL version:` line plus a blocking `Microsoft.WSL` pin. Inbox `System32\wsl.exe` stubs do not count. It no longer calls `api.github.com`. Later `winget configure` runs therefore do not restart WSL.
+- When Test fails because that version is missing, `SetScript` runs `wsl --update --web-download` (then `--install` if needed) and discovers `wsl.exe` via `Get-Command` when System32 is missing (WOW64). Native `wsl`/`winget` calls use `SilentlyContinue` and `$LASTEXITCODE` so Windows PowerShell 5.1 does not treat stderr as a terminating error. If WSL is already installed, Set only retries the pin (no second `--update`). Pin add failure does not fail Set. Keep WSL current after bootstrap with `Update-Packages.ps1`.
+- For `ensure: Absent`, the generator unpins `Microsoft.WSL` before emitting `WinGetPackage` Absent so a blocking pin cannot block uninstall.
 - `Update-Wsl` uses a `wsl.exe` PATH fallback and `--install --web-download` when `Get-WslExePath` is null, matching SetScript bootstrap
 - `winget configure` no longer emits `WinGetPackage` for `Microsoft.WSL` Present, so a MSIX `0x80073d28` cannot abort the web-download Script
 - WSL pin detection matches `Microsoft.WSL` as its own token (not `Microsoft.WSLg` / `Microsoft.WSLPreview`)

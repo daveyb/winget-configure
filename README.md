@@ -79,7 +79,7 @@ Use `Update-Packages.ps1` instead of `winget upgrade --all`. WSL's winget MSIX i
 .\Update-Packages.ps1
 ```
 
-`winget configure` bootstraps WSL with a `PSDscResources/Script` resource (`Microsoft.WSL.WebUpdate`) instead of `WinGetPackage`, so a MSIX `0x80073d28` cannot stop the run. Test is local (`wsl.exe` present plus a blocking `Microsoft.WSL` pin) so later configures do not restart WSL. When Test fails, Set runs `wsl --update --web-download` (same path as `Update-Wsl`) and pins. Keep WSL current after that with `Update-Packages.ps1`. After the pin is in place, a raw `winget upgrade --all` will no longer try (and fail) to upgrade WSL.
+`winget configure` bootstraps WSL with a `PSDscResources/Script` resource (`Microsoft.WSL.WebUpdate`) instead of `WinGetPackage`, so a MSIX `0x80073d28` cannot stop the run. Test is local (a real `wsl --version` `WSL version:` line plus a blocking `Microsoft.WSL` pin) so inbox stubs do not count and later configures do not restart WSL. When that version is missing, Set runs `wsl --update --web-download` (same path as `Update-Wsl`) and pins; if WSL is already installed, Set only adds the pin. Keep WSL current after that with `Update-Packages.ps1`. After the pin is in place, a raw `winget upgrade --all` will no longer try (and fail) to upgrade WSL.
 
 ## Editing the Package List
 
