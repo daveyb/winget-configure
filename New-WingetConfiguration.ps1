@@ -359,9 +359,11 @@ function Read-DscEnsureMap
 # ── WSL special-case (web-download + winget pin) ──────────────────────────────
 #
 # winget's Microsoft.WSL MSIX installer fails with 0x80073d28 when administrator
-# privileges are required. Keep the WinGetPackage resource for install/uninstall
-# tracking, and add a Script resource that updates via `wsl --update --web-download`
-# and pins Microsoft.WSL so `winget upgrade --all` skips the broken path.
+# privileges are required. Do not emit WinGetPackage for Present (that resource
+# can abort `winget configure` before the Script runs). Use a Script resource
+# that installs/updates via `wsl --update --web-download` and pins Microsoft.WSL
+# so `winget upgrade --all` skips the broken path. Absent still uses WinGetPackage
+# plus an unpin Script.
 
 $WSL_PACKAGE_ID = 'Microsoft.WSL'
 
@@ -399,7 +401,7 @@ try {
         if ($out -match "WSL version:\s*(\S+)") { $ver = $Matches[1] }
     }
     $pins = & winget pin list --disable-interactivity 2>&1 | Out-String
-    if ($pins -match "Microsoft\.WSL") { $pinned = $true }
+    if ($pins -match '\bMicrosoft\.WSL\b') { $pinned = $true }
 } catch {
 }
 return @{ Result = "version=$ver;pinned=$pinned" }
@@ -413,23 +415,8 @@ $ErrorActionPreference = "Continue"
 try {
     $wsl = Join-Path $env:SystemRoot "System32\wsl.exe"
     if (-not (Test-Path -LiteralPath $wsl)) { return $false }
-    $verOut = (& $wsl --version 2>&1 | Out-String) -replace "`0", ""
-    if ($verOut -notmatch "WSL version:\s*([\d.]+)") { return $false }
-    $installed = $Matches[1]
     $pins = & winget pin list --disable-interactivity 2>&1 | Out-String
-    if ($pins -notmatch "Microsoft\.WSL") { return $false }
-    $rel = Invoke-RestMethod -Uri "https://api.github.com/repos/microsoft/WSL/releases/latest" -Headers @{ "User-Agent" = "winget-configure" } -UseBasicParsing
-    $latest = ([string]$rel.tag_name).TrimStart("v")
-    $iParts = New-Object System.Collections.Generic.List[int]
-    $lParts = New-Object System.Collections.Generic.List[int]
-    foreach ($p in $installed.Split(".")) { if ($p -match "^\d+$") { $iParts.Add([int]$p) } }
-    foreach ($p in $latest.Split(".")) { if ($p -match "^\d+$") { $lParts.Add([int]$p) } }
-    while ($iParts.Count -lt 4) { $iParts.Add(0) }
-    while ($lParts.Count -lt 4) { $lParts.Add(0) }
-    for ($n = 0; $n -lt 4; $n++) {
-        if ($iParts[$n] -lt $lParts[$n]) { return $false }
-        if ($iParts[$n] -gt $lParts[$n]) { return $true }
-    }
+    if ($pins -notmatch '\bMicrosoft\.WSL\b') { return $false }
     return $true
 } catch {
     return $false
@@ -445,16 +432,24 @@ $wsl = Join-Path $env:SystemRoot "System32\wsl.exe"
 if (-not (Test-Path -LiteralPath $wsl)) {
     throw "wsl.exe was not found under System32"
 }
-$null = & $wsl --update --web-download 2>&1
-if ($LASTEXITCODE -ne 0) {
-    $null = & $wsl --install --no-distribution --web-download 2>&1
+$verOut = (& $wsl --version 2>&1 | Out-String) -replace "`0", ""
+if ($verOut -notmatch "WSL version:\s*\S+") {
+    $null = & $wsl --update --web-download 2>&1
     if ($LASTEXITCODE -ne 0) {
-        throw "WSL web-download failed with exit $LASTEXITCODE"
+        $null = & $wsl --install --no-distribution --web-download 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            throw "WSL web-download failed with exit $LASTEXITCODE"
+        }
     }
 }
 $pins = & winget pin list --disable-interactivity 2>&1 | Out-String
-if ($pins -notmatch "Microsoft\.WSL") {
+if ($pins -notmatch '\bMicrosoft\.WSL\b') {
     $null = & winget pin add --id Microsoft.WSL --exact --blocking --disable-interactivity --accept-source-agreements 2>&1
+    $pinCode = $LASTEXITCODE
+    $pins = & winget pin list --disable-interactivity 2>&1 | Out-String
+    if (($pinCode -ne 0) -and ($pins -notmatch '\bMicrosoft\.WSL\b')) {
+        throw "Could not pin Microsoft.WSL (exit $pinCode)"
+    }
 }
 '@
 }
@@ -466,7 +461,7 @@ $ErrorActionPreference = "Continue"
 $pinned = $false
 try {
     $pins = & winget pin list --disable-interactivity 2>&1 | Out-String
-    if ($pins -match "Microsoft\.WSL") { $pinned = $true }
+    if ($pins -match '\bMicrosoft\.WSL\b') { $pinned = $true }
 } catch {
 }
 return @{ Result = "pinned=$pinned" }
@@ -479,7 +474,7 @@ function Get-WslUnpinTestScript
 $ErrorActionPreference = "Continue"
 try {
     $pins = & winget pin list --disable-interactivity 2>&1 | Out-String
-    return ($pins -notmatch "Microsoft\.WSL")
+    return ($pins -notmatch '\bMicrosoft\.WSL\b')
 } catch {
     return $true
 }
@@ -491,7 +486,7 @@ function Get-WslUnpinSetScript
     @'
 $ErrorActionPreference = "Continue"
 $pins = & winget pin list --disable-interactivity 2>&1 | Out-String
-if ($pins -match "Microsoft\.WSL") {
+if ($pins -match '\bMicrosoft\.WSL\b') {
     $null = & winget pin remove --id Microsoft.WSL --exact --disable-interactivity 2>&1
 }
 '@
@@ -571,21 +566,25 @@ function Build-DscYaml
         { 'Present'
         }
 
-        $null = $sb.AppendLine('')
-        $null = $sb.AppendLine('    - resource: Microsoft.WinGet.DSC/WinGetPackage')
-        $null = $sb.AppendLine('      directives:')
-        $null = $sb.AppendLine("        description: $desc")
-        $null = $sb.AppendLine('        allowPrerelease: true')
-        $null = $sb.AppendLine('      settings:')
-        $null = $sb.AppendLine("        id: $($entry.Id)")
-        $null = $sb.AppendLine('        source: winget')
-        $null = $sb.AppendLine("        ensure: $ensure")
+        $isWslPresent = ($entry.Id -eq $WSL_PACKAGE_ID -and $ensure -eq 'Present')
+        if (-not $isWslPresent)
+        {
+            $null = $sb.AppendLine('')
+            $null = $sb.AppendLine('    - resource: Microsoft.WinGet.DSC/WinGetPackage')
+            $null = $sb.AppendLine('      directives:')
+            $null = $sb.AppendLine("        description: $desc")
+            $null = $sb.AppendLine('        allowPrerelease: true')
+            $null = $sb.AppendLine('      settings:')
+            $null = $sb.AppendLine("        id: $($entry.Id)")
+            $null = $sb.AppendLine('        source: winget')
+            $null = $sb.AppendLine("        ensure: $ensure")
+        }
 
-        if ($entry.Id -eq $WSL_PACKAGE_ID -and $ensure -eq 'Present')
+        if ($isWslPresent)
         {
             Add-WslScriptResource -Builder $sb `
                 -ResourceId 'Microsoft.WSL.WebUpdate' `
-                -Description 'Update WSL via web-download and pin Microsoft.WSL (avoids winget 0x80073d28)' `
+                -Description 'Install or update WSL via web-download and pin Microsoft.WSL (avoids winget 0x80073d28)' `
                 -GetScript (Get-WslUpdateGetScript) `
                 -TestScript (Get-WslUpdateTestScript) `
                 -SetScript (Get-WslUpdateSetScript)

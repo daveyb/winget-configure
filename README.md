@@ -79,7 +79,7 @@ Use `Update-Packages.ps1` instead of `winget upgrade --all`. WSL's winget MSIX i
 .\Update-Packages.ps1
 ```
 
-`winget configure` applies the same WSL pin and web-download update when `Microsoft.WSL` is in `winget-packages.yml`. After that pin is in place, a raw `winget upgrade --all` will no longer try (and fail) to upgrade WSL.
+`winget configure` installs and pins WSL with a `PSDscResources/Script` resource (`Microsoft.WSL.WebUpdate`) instead of `WinGetPackage`, so a MSIX `0x80073d28` cannot stop the run. After that pin is in place, a raw `winget upgrade --all` will no longer try (and fail) to upgrade WSL.
 
 ## Editing the Package List
 

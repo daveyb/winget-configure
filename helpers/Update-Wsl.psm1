@@ -72,7 +72,8 @@ function Test-WslWingetPin
     try
     {
         $pins = & winget pin list --disable-interactivity 2>&1 | Out-String
-        if ($pins -match 'Microsoft\.WSL')
+        # Token match so Microsoft.WSLg / Microsoft.WSLPreview do not count.
+        if ($pins -match '\bMicrosoft\.WSL\b')
         {
             return $true
         }

@@ -13,6 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - `Microsoft.WSL` upgrades no longer depend on `winget upgrade`, which fails with `0x80073d28` when administrator privileges are required
+- DSC `TestScript` for WSL is local-only (`wsl.exe` present plus a blocking `Microsoft.WSL` pin); it no longer calls `api.github.com`
+- `winget configure` no longer emits `WinGetPackage` for `Microsoft.WSL` Present, so a MSIX `0x80073d28` cannot abort the web-download Script
+- WSL pin detection matches `Microsoft.WSL` as its own token (not `Microsoft.WSLg` / `Microsoft.WSLPreview`), and Set fails if the pin cannot be added
 
 ## [1.1.16] - 2026-09-05
 

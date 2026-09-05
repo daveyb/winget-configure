@@ -222,19 +222,10 @@ properties:
 
     # -- Containers & virtualization ----------------------------------------------------------------
 
-    - resource: Microsoft.WinGet.DSC/WinGetPackage
-      directives:
-        description: Windows Subsystem for Linux (updates via wsl --update --web-download)
-        allowPrerelease: true
-      settings:
-        id: Microsoft.WSL
-        source: winget
-        ensure: Present
-
     - resource: PSDscResources/Script
       id: Microsoft.WSL.WebUpdate
       directives:
-        description: Update WSL via web-download and pin Microsoft.WSL (avoids winget 0x80073d28)
+        description: Install or update WSL via web-download and pin Microsoft.WSL (avoids winget 0x80073d28)
         allowPrerelease: true
       settings:
         GetScript: |
@@ -248,7 +239,7 @@ properties:
                   if ($out -match "WSL version:\s*(\S+)") { $ver = $Matches[1] }
               }
               $pins = & winget pin list --disable-interactivity 2>&1 | Out-String
-              if ($pins -match "Microsoft\.WSL") { $pinned = $true }
+              if ($pins -match '\bMicrosoft\.WSL\b') { $pinned = $true }
           } catch {
           }
           return @{ Result = "version=$ver;pinned=$pinned" }
@@ -257,23 +248,8 @@ properties:
           try {
               $wsl = Join-Path $env:SystemRoot "System32\wsl.exe"
               if (-not (Test-Path -LiteralPath $wsl)) { return $false }
-              $verOut = (& $wsl --version 2>&1 | Out-String) -replace "`0", ""
-              if ($verOut -notmatch "WSL version:\s*([\d.]+)") { return $false }
-              $installed = $Matches[1]
               $pins = & winget pin list --disable-interactivity 2>&1 | Out-String
-              if ($pins -notmatch "Microsoft\.WSL") { return $false }
-              $rel = Invoke-RestMethod -Uri "https://api.github.com/repos/microsoft/WSL/releases/latest" -Headers @{ "User-Agent" = "winget-configure" } -UseBasicParsing
-              $latest = ([string]$rel.tag_name).TrimStart("v")
-              $iParts = New-Object System.Collections.Generic.List[int]
-              $lParts = New-Object System.Collections.Generic.List[int]
-              foreach ($p in $installed.Split(".")) { if ($p -match "^\d+$") { $iParts.Add([int]$p) } }
-              foreach ($p in $latest.Split(".")) { if ($p -match "^\d+$") { $lParts.Add([int]$p) } }
-              while ($iParts.Count -lt 4) { $iParts.Add(0) }
-              while ($lParts.Count -lt 4) { $lParts.Add(0) }
-              for ($n = 0; $n -lt 4; $n++) {
-                  if ($iParts[$n] -lt $lParts[$n]) { return $false }
-                  if ($iParts[$n] -gt $lParts[$n]) { return $true }
-              }
+              if ($pins -notmatch '\bMicrosoft\.WSL\b') { return $false }
               return $true
           } catch {
               return $false
@@ -284,16 +260,24 @@ properties:
           if (-not (Test-Path -LiteralPath $wsl)) {
               throw "wsl.exe was not found under System32"
           }
-          $null = & $wsl --update --web-download 2>&1
-          if ($LASTEXITCODE -ne 0) {
-              $null = & $wsl --install --no-distribution --web-download 2>&1
+          $verOut = (& $wsl --version 2>&1 | Out-String) -replace "`0", ""
+          if ($verOut -notmatch "WSL version:\s*\S+") {
+              $null = & $wsl --update --web-download 2>&1
               if ($LASTEXITCODE -ne 0) {
-                  throw "WSL web-download failed with exit $LASTEXITCODE"
+                  $null = & $wsl --install --no-distribution --web-download 2>&1
+                  if ($LASTEXITCODE -ne 0) {
+                      throw "WSL web-download failed with exit $LASTEXITCODE"
+                  }
               }
           }
           $pins = & winget pin list --disable-interactivity 2>&1 | Out-String
-          if ($pins -notmatch "Microsoft\.WSL") {
+          if ($pins -notmatch '\bMicrosoft\.WSL\b') {
               $null = & winget pin add --id Microsoft.WSL --exact --blocking --disable-interactivity --accept-source-agreements 2>&1
+              $pinCode = $LASTEXITCODE
+              $pins = & winget pin list --disable-interactivity 2>&1 | Out-String
+              if (($pinCode -ne 0) -and ($pins -notmatch '\bMicrosoft\.WSL\b')) {
+                  throw "Could not pin Microsoft.WSL (exit $pinCode)"
+              }
           }
 
     - resource: Microsoft.WinGet.DSC/WinGetPackage
