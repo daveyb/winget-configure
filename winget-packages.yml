@@ -29,6 +29,7 @@ packages:
     - Anthropic.ClaudeCode
     - Google.Antigravity
     - xAI.GrokBuild # Grok Build CLI agent
+    - Herdr.Herdr.Preview # herdr agent runtime (preview)
     - Google.AndroidStudio
     - Hashicorp.TerraformLanguageServer
 
