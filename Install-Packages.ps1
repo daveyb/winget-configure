@@ -404,24 +404,32 @@ foreach ($package in $PackageList)
         $result = Uninstall-WingetPackage -PackageId $package -Quiet:$Quiet
     } else
     {
-        $result = Install-WingetPackage -PackageId $package -Force:$Force -Quiet:$Quiet
         if (($package -eq 'Microsoft.WSL') -and (Get-Command -Name Update-Wsl -ErrorAction SilentlyContinue))
         {
-            $needsWslFallback = -not $result.Success
-            if ($needsWslFallback -and (($result.Message -match 'administrator') -or ($result.Message -match '0x80073d28')))
-            {
-                Write-ProgressInfo "  └─ Falling back to wsl --update --web-download" -Quiet:$Quiet
-                $wslResult = Update-Wsl -Quiet:$Quiet
-                if ($wslResult.Success)
-                {
-                    $result.Success = $true
-                    $result.Message = $wslResult.Message
-                }
+            # Skip winget: a blocking Microsoft.WSL pin makes install/upgrade
+            # fail with a pin error (not 0x80073d28), so the old fallback
+            # never ran. Match winget configure: always use Update-Wsl.
+            Write-ProgressInfo "Processing package: $package" -Quiet:$Quiet
+            Write-ProgressInfo "  └─ Skipping winget; using wsl --update --web-download" -Quiet:$Quiet
+            $wslResult = Update-Wsl -Quiet:$Quiet
+            $result = @{
+                PackageId        = $package
+                Success          = [bool]$wslResult.Success
+                Message          = [string]$wslResult.Message
+                AlreadyInstalled = $false
             }
-            elseif ($result.Success)
+            if ($result.Success)
             {
-                $null = Add-WslWingetPin -Quiet:$Quiet
+                Write-ProgressSuccess "  └─ ✓ WSL via web-download" -Quiet:$Quiet
             }
+            else
+            {
+                Write-ProgressWarning "  └─ ✗ WSL web-download failed" -Quiet:$Quiet
+            }
+        }
+        else
+        {
+            $result = Install-WingetPackage -PackageId $package -Force:$Force -Quiet:$Quiet
         }
     }
     $results += $result

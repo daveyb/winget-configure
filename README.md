@@ -127,7 +127,7 @@ This means you never need to hand‑edit the DSC file — just add or remove lin
 |------|---------|
 | `winget-packages.yml` | Single source of truth for package IDs, organised by category. |
 | `New-WingetConfiguration.ps1` | Generator script — reads YAML, diffs against Git HEAD, emits `.configurations\configuration.dsc.yaml` with removal tracking. |
-| `Install-Packages.ps1` | Legacy imperative installer — calls `winget install` per package. Kept for local accounts. Falls back to `wsl --update --web-download` if `Microsoft.WSL` hits `0x80073d28`. |
+| `Install-Packages.ps1` | Legacy imperative installer — calls `winget install` per package. Kept for local accounts. Skips winget for `Microsoft.WSL` and calls `Update-Wsl` (`wsl --update --web-download`) so a blocking pin cannot fail the run. |
 | `Update-Packages.ps1` | Upgrade wrapper — pins `Microsoft.WSL`, runs `winget upgrade --all`, then updates WSL via web-download. |
 | `.configurations\configuration.dsc.yaml` | **Generated** DSC file consumed by `winget configure`. Schema version [0.2](https://aka.ms/configuration-dsc-schema/0.2). |
 | `helpers\Enable-Winget.psm1` | Helper module to enable the winget feature. |

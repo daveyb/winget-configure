@@ -363,7 +363,8 @@ function Read-DscEnsureMap
 # can abort `winget configure` before the Script runs). Use a Script resource
 # that installs/updates via `wsl --update --web-download` and pins Microsoft.WSL
 # so `winget upgrade --all` skips the broken path. Absent unpins first, then
-# emits WinGetPackage Absent (a blocking pin can make uninstall fail).
+# emits WinGetPackage Absent with dependsOn: Microsoft.WSL.Unpin so configure
+# cannot uninstall while the blocking pin is still in place.
 
 $WSL_PACKAGE_ID = 'Microsoft.WSL'
 
@@ -628,6 +629,11 @@ function Build-DscYaml
 
         $null = $sb.AppendLine('')
         $null = $sb.AppendLine('    - resource: Microsoft.WinGet.DSC/WinGetPackage')
+        if ($isWslAbsent)
+        {
+            $null = $sb.AppendLine('      dependsOn:')
+            $null = $sb.AppendLine('        - Microsoft.WSL.Unpin')
+        }
         $null = $sb.AppendLine('      directives:')
         $null = $sb.AppendLine("        description: $desc")
         $null = $sb.AppendLine('        allowPrerelease: true')
