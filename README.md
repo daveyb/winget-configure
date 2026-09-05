@@ -71,6 +71,16 @@ winget configure              ← applies desired state to your machine
 2. **`New-WingetConfiguration.ps1`** reads that YAML, compares it against the previously committed version in Git (`HEAD`), and emits a fully‑formed DSC configuration file. Newly added packages get `ensure: Present`; packages you remove from the YAML are automatically marked `ensure: Absent` so that `winget configure` will uninstall them.
 3. **`winget configure`** walks the generated DSC file and reconciles each resource. Packages marked `Present` are installed if missing; packages marked `Absent` are uninstalled if found. The operation is declarative and idempotent.
 
+## Updating Installed Packages
+
+Use `Update-Packages.ps1` instead of `winget upgrade --all`. WSL's winget MSIX installer fails with `0x80073d28` when administrator privileges are required; this script pins `Microsoft.WSL` so winget skips it, upgrades everything else, then runs `wsl --update --web-download`.
+
+```powershell
+.\Update-Packages.ps1
+```
+
+`winget configure` applies the same WSL pin and web-download update when `Microsoft.WSL` is in `winget-packages.yml`. After that pin is in place, a raw `winget upgrade --all` will no longer try (and fail) to upgrade WSL.
+
 ## Editing the Package List
 
 Open `winget-packages.yml` and add, remove, or reorganise entries under any category:
@@ -117,11 +127,13 @@ This means you never need to hand‑edit the DSC file — just add or remove lin
 |------|---------|
 | `winget-packages.yml` | Single source of truth for package IDs, organised by category. |
 | `New-WingetConfiguration.ps1` | Generator script — reads YAML, diffs against Git HEAD, emits `.configurations\configuration.dsc.yaml` with removal tracking. |
-| `Install-Packages.ps1` | Legacy imperative installer — calls `winget install` per package. Kept for local accounts. |
+| `Install-Packages.ps1` | Legacy imperative installer — calls `winget install` per package. Kept for local accounts. Falls back to `wsl --update --web-download` if `Microsoft.WSL` hits `0x80073d28`. |
+| `Update-Packages.ps1` | Upgrade wrapper — pins `Microsoft.WSL`, runs `winget upgrade --all`, then updates WSL via web-download. |
 | `.configurations\configuration.dsc.yaml` | **Generated** DSC file consumed by `winget configure`. Schema version [0.2](https://aka.ms/configuration-dsc-schema/0.2). |
 | `helpers\Enable-Winget.psm1` | Helper module to enable the winget feature. |
 | `helpers\Ensure-Winget.psm1` | Helper module to ensure winget is installed and available. |
 | `helpers\Test-WingetEnabled.psm1` | Helper module to test whether winget is enabled. |
+| `helpers\Update-Wsl.psm1` | Helper module to update WSL via web-download and pin `Microsoft.WSL`. |
 
 ## Prerequisites
 
@@ -149,6 +161,7 @@ Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 | **Package ID not found** | IDs change over time. Search the [winget-pkgs repository](https://github.com/microsoft/winget-pkgs) for the current ID. |
 | **Permission denied** | Right‑click PowerShell → **Run as Administrator**, then retry. |
 | **DSC file looks stale** | Re‑run `.\New-WingetConfiguration.ps1` after editing `winget-packages.yml`. The DSC file is a generated artifact. |
+| **`Microsoft.WSL` upgrade fails with `0x80073d28`** | Do not retry `winget upgrade Microsoft.WSL`. Run `.\Update-Packages.ps1` (or `wsl --update --web-download`). The configuration pins WSL so `winget upgrade --all` skips it. |
 
 ## Legacy Mode
 

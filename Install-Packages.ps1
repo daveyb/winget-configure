@@ -300,7 +300,7 @@ function Install-WingetPackage
             {
                 $result.Message = 'Package not found in winget repository'
                 Write-ProgressWarning "    └─ Package not found in repository" -Quiet:$Quiet
-            } elseif ($output -match 'requires admin privileges')
+            } elseif (($output -match '0x80073d28') -or ($output -match 'administrator privileges are required') -or ($output -match 'requires admin privileges'))
             {
                 $result.Message = 'Requires administrator privileges'
                 Write-ProgressWarning "    └─ Administrator privileges required" -Quiet:$Quiet
@@ -322,6 +322,7 @@ Write-Host ''
 
 # Step 0: Resolve the winget helper module
 $helperPath = Join-Path $PSScriptRoot 'helpers\Ensure-Winget.psm1'
+$wslHelperPath = Join-Path $PSScriptRoot 'helpers\Update-Wsl.psm1'
 
 if (-not (Test-Path $helperPath))
 {
@@ -331,6 +332,10 @@ if (-not (Test-Path $helperPath))
 }
 
 Import-Module $helperPath -Force
+if (Test-Path -LiteralPath $wslHelperPath)
+{
+    Import-Module $wslHelperPath -Force
+}
 
 # Step 1: Build the package list ──────────────────────────────────────────────
 #
@@ -400,6 +405,24 @@ foreach ($package in $PackageList)
     } else
     {
         $result = Install-WingetPackage -PackageId $package -Force:$Force -Quiet:$Quiet
+        if (($package -eq 'Microsoft.WSL') -and (Get-Command -Name Update-Wsl -ErrorAction SilentlyContinue))
+        {
+            $needsWslFallback = -not $result.Success
+            if ($needsWslFallback -and (($result.Message -match 'administrator') -or ($result.Message -match '0x80073d28')))
+            {
+                Write-ProgressInfo "  └─ Falling back to wsl --update --web-download" -Quiet:$Quiet
+                $wslResult = Update-Wsl -Quiet:$Quiet
+                if ($wslResult.Success)
+                {
+                    $result.Success = $true
+                    $result.Message = $wslResult.Message
+                }
+            }
+            elseif ($result.Success)
+            {
+                $null = Add-WslWingetPin -Quiet:$Quiet
+            }
+        }
     }
     $results += $result
 

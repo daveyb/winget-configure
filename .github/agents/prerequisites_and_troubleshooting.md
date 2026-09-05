@@ -27,6 +27,7 @@ When a configuration fails, follow this flowchart to diagnose the root cause:
 | DSC file is missing or empty. | The generator script was skipped, failed, or was run against a stale YAML. | **Action:** Ensure `New-WingetConfiguration.ps1` is run successfully in Step 2. Manually verify that `.configurations/configuration.dsc.yaml` was created. |
 | Package ID failure | The package ID in `winget-packages.yml` is outdated. | **Action:** Manually search for the current, correct ID in the official [winget-pkgs repository](https://github.com/microsoft/winget-pkgs). |
 | **Stale Configuration** | The desired state hasn't changed since the last commit. | **Action:** Run `git add winget-packages.yml` followed by a commit to force the generator to re-diff and update the DSC artifact. |
+| **`Microsoft.WSL` / `0x80073d28`** | winget's WSL MSIX installer requires administrator privileges. | **Action:** Run `.\Update-Packages.ps1` or `wsl --update --web-download`. Do not retry `winget upgrade Microsoft.WSL`. |
 
 ---
 
