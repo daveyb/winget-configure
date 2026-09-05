@@ -182,12 +182,7 @@ function Update-Wsl
     $wsl = Get-WslExePath
     if (-not $wsl)
     {
-        $result.Message = 'wsl.exe was not found under System32'
-        if (-not $Quiet)
-        {
-            Write-Warning $result.Message
-        }
-        return $result
+        $wsl = 'wsl.exe'
     }
 
     if (-not $Quiet)
@@ -195,6 +190,8 @@ function Update-Wsl
         Write-Host '[...] Updating WSL via wsl --update --web-download' -ForegroundColor Blue
     }
 
+    $saved = $ErrorActionPreference
+    $ErrorActionPreference = 'SilentlyContinue'
     $updateOutput = & $wsl --update --web-download 2>&1 | Out-String
     $updateCode = $LASTEXITCODE
 
@@ -207,6 +204,7 @@ function Update-Wsl
         $updateOutput = & $wsl --install --no-distribution --web-download 2>&1 | Out-String
         $updateCode = $LASTEXITCODE
     }
+    $ErrorActionPreference = $saved
 
     $result.Version = Get-InstalledWslVersion
 
