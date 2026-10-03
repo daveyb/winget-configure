@@ -671,7 +671,7 @@ function Build-DscYaml
     $null = $sb.AppendLine('    # -- Lock-screen playback ----------------------------------------------------------------')
     Add-WslScriptResource -Builder $sb `
         -ResourceId 'Chrome.LockScreenPlayback' `
-        -Description 'Disable Chrome window occlusion so Pocket Casts can play on the lock screen' `
+        -Description 'Disable Chrome window occlusion and keep the lock-screen display timeout at 30 seconds' `
         -GetScript (Get-LockScreenPlaybackScript -Library $lockLibrary -Invocation 'return (Get-LockScreenPlaybackReport)') `
         -TestScript (Get-LockScreenPlaybackScript -Library $lockLibrary -Invocation 'return (Test-LockScreenPlayback)') `
         -SetScript (Get-LockScreenPlaybackScript -Library $lockLibrary -Invocation 'Set-LockScreenPlayback')
