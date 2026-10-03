@@ -528,6 +528,28 @@ if ($pins -match '\bMicrosoft\.WSL\b') {
 '@
 }
 
+function Get-LockScreenPlaybackLibrary
+{
+    $path = Join-Path $PSScriptRoot 'helpers\LockScreenPlayback.ps1'
+    if (-not (Test-Path -LiteralPath $path))
+    {
+        throw "Lock-screen playback script not found: $path"
+    }
+
+    return (Get-Content -LiteralPath $path -Raw).TrimEnd()
+}
+
+function Get-LockScreenPlaybackScript
+{
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$Library,
+        [Parameter(Mandatory)][string]$Invocation
+    )
+
+    return ($Library + "`n" + $Invocation)
+}
+
 function Add-WslScriptResource
 {
     [CmdletBinding()]
@@ -579,6 +601,16 @@ function Build-DscYaml
     $null = $sb.AppendLine('properties:')
     $null = $sb.AppendLine("  configurationVersion: $DSC_SCHEMA_VERSION")
     $null = $sb.AppendLine('  resources:')
+
+    $lockLibrary = Get-LockScreenPlaybackLibrary
+    $null = $sb.AppendLine('')
+    $null = $sb.AppendLine('    # -- Lock-screen playback ----------------------------------------------------------------')
+    Add-WslScriptResource -Builder $sb `
+        -ResourceId 'Chrome.LockScreenPlayback' `
+        -Description 'Disable Chrome window occlusion and keep the lock-screen display timeout at 30 seconds' `
+        -GetScript (Get-LockScreenPlaybackScript -Library $lockLibrary -Invocation 'return (Get-LockScreenPlaybackReport)') `
+        -TestScript (Get-LockScreenPlaybackScript -Library $lockLibrary -Invocation 'return (Test-LockScreenPlayback)') `
+        -SetScript (Get-LockScreenPlaybackScript -Library $lockLibrary -Invocation 'Set-LockScreenPlayback')
 
     $lastCategory = $null
 

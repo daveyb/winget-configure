@@ -323,6 +323,7 @@ Write-Host ''
 # Step 0: Resolve the winget helper module
 $helperPath = Join-Path $PSScriptRoot 'helpers\Ensure-Winget.psm1'
 $wslHelperPath = Join-Path $PSScriptRoot 'helpers\Update-Wsl.psm1'
+$lockHelperPath = Join-Path $PSScriptRoot 'helpers\LockScreenPlayback.psm1'
 
 if (-not (Test-Path $helperPath))
 {
@@ -335,6 +336,10 @@ Import-Module $helperPath -Force
 if (Test-Path -LiteralPath $wslHelperPath)
 {
     Import-Module $wslHelperPath -Force
+}
+if (Test-Path -LiteralPath $lockHelperPath)
+{
+    Import-Module $lockHelperPath -Force
 }
 
 # Step 1: Build the package list ──────────────────────────────────────────────
@@ -382,6 +387,29 @@ if (-not (Ensure-Winget -Quiet:$Quiet))
 
 Write-ProgressSuccess '✓ winget is ready' -Quiet:$Quiet
 Write-Host ''
+
+# Step 2b: Keep Pocket Casts playing across the lock screen.
+# Same desired state as the Chrome.LockScreenPlayback DSC resource.
+if (-not $Thermonuclear)
+{
+    if (-not (Get-Command -Name Set-LockScreenPlayback -ErrorAction SilentlyContinue))
+    {
+        Write-Error "Lock-screen playback module not found at: $lockHelperPath"
+        exit 1
+    }
+
+    Write-ProgressInfo 'Configuring lock-screen playback...' -Quiet:$Quiet
+    $lockScreenAlreadySet = Test-LockScreenPlayback
+    Set-LockScreenPlayback
+    if ($lockScreenAlreadySet)
+    {
+        Write-ProgressSuccess 'Lock-screen playback already configured' -Quiet:$Quiet
+    } else
+    {
+        Write-ProgressSuccess 'Lock-screen playback configured. Restart Chrome before the next locked-screen listen.' -Quiet:$Quiet
+    }
+    Write-Host ''
+}
 
 # Step 3: Process packages ────────────────────────────────────────────────────
 Write-ProgressInfo 'Step 2: Processing packages...' -Quiet:$Quiet

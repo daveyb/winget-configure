@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.18] - 2026-10-02
+
+### Fixed
+- Pocket Casts pauses when the screen locks because Chrome treats the lock screen as a covered window. `winget configure` now sets Chrome machine policy `WindowOcclusionEnabled` to 0 and sets the console lock display-off timeout (`VIDEOCONLOCK`) back to 30 seconds on AC and battery.
+- `Install-Packages.ps1` applies the same lock-screen playback settings. Restart Chrome before the next locked-screen listen. Closing the lid, the power button, and Sleep still stop audio.
+
 ## [1.1.17] - 2026-09-05
 
 ### Added
