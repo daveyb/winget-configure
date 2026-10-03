@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.18] - 2026-10-03
+
+### Fixed
+- Pocket Casts pauses when the screen locks because Chrome treats the lock screen as a covered window. `winget configure` sets Chrome machine policy `WindowOcclusionEnabled` to 0. It does not change the console lock display-off timeout (`VIDEOCONLOCK`); that value is not part of compliance. The timeout reader parses only the block after the VIDEOCONLOCK alias or GUID, and a missing block includes powercfg stdout in the error.
+- `Install-Packages.ps1` applies the same Chrome policy. Run it from an Administrator PowerShell window. If that step fails, it warns and package installation continues. The DSC resource is after the package resources, so a lock-screen failure does not abort them. Restart Chrome before the next locked-screen listen. Closing the lid, the power button, and Sleep still stop audio.
+
 ## [1.1.17] - 2026-09-05
 
 ### Added

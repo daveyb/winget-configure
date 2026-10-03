@@ -6,6 +6,7 @@ on:
     paths:
       - 'winget-packages.yml'
       - 'New-WingetConfiguration.ps1'
+      - 'helpers/LockScreenPlayback.ps1'
       - '.github/workflows/validate-config.yml'
   workflow_dispatch:
 

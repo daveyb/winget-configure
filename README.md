@@ -15,7 +15,7 @@ edit .\winget-packages.yml
 winget configure -f .configurations\configuration.dsc.yaml
 ```
 
-> **Note:** `winget configure` requires a Microsoft-connected account. If you are using a local Windows account, see [Legacy Mode](#legacy-mode) below.
+> **Note:** Run step 3 from an [elevated PowerShell window](#elevated-session). `winget configure` also requires a Microsoft-connected account. If you are using a local Windows account, see [Legacy Mode](#legacy-mode) below.
 
 ## Apply the Released Configuration Without Cloning
 
@@ -49,7 +49,7 @@ Invoke-WebRequest `
     -OutFile (Join-Path $env:TEMP "configuration.dsc.yaml")
 ```
 
-> **Prerequisites still apply:** an elevated (Administrator) PowerShell session and a Microsoft-connected account are required by `winget configure`. See [Prerequisites](#prerequisites) for details.
+> **Prerequisites still apply:** open an [elevated PowerShell window](#elevated-session) first. `winget configure` also requires a Microsoft-connected account. See [Prerequisites](#prerequisites).
 
 ## How It Works
 
@@ -80,6 +80,28 @@ Use `Update-Packages.ps1` instead of `winget upgrade --all`. WSL's winget MSIX i
 ```
 
 `winget configure` bootstraps WSL with a `PSDscResources/Script` resource (`Microsoft.WSL.WebUpdate`) instead of `WinGetPackage`, so a MSIX `0x80073d28` cannot stop the run. Test is local (a real `wsl --version` `WSL version:` line plus a blocking `Microsoft.WSL` pin) so inbox stubs do not count and later configures do not restart WSL. When that version is missing, Set runs `wsl --update --web-download` (same path as `Update-Wsl`) and pins; if WSL is already installed, Set only adds the pin. Keep WSL current after that with `Update-Packages.ps1`. After the pin is in place, a raw `winget upgrade --all` will no longer try (and fail) to upgrade WSL.
+
+## Lock-screen playback
+
+Pocket Casts on Windows is the Chrome app. Chrome suspends a window it decides is covered, including while the screen is locked, and the episode pauses. The generated configuration includes a `Chrome.LockScreenPlayback` script resource after the package resources. It sets Chrome machine policy `HKLM\SOFTWARE\Policies\Google\Chrome\WindowOcclusionEnabled` to `0`.
+
+It does not rewrite the active power scheme. `VIDEOCONLOCK` is not part of compliance. The policy applies to every user and every Chrome window, and this script does not remove it later.
+
+`Install-Packages.ps1` applies the same Chrome policy. Both the script and `winget configure` need an [elevated PowerShell window](#elevated-session) to write that policy. If `Install-Packages.ps1` is not elevated, it warns and still installs packages. The DSC resource is after the package resources, so a lock-screen failure does not abort them. `winget configure` still reports that resource as failed until an Administrator window applies the policy:
+
+```powershell
+winget configure -f .configurations\configuration.dsc.yaml
+```
+
+Or, for a local account:
+
+```powershell
+.\Install-Packages.ps1
+```
+
+The window title must say Administrator. Otherwise the Chrome policy is not written. Package installation still continues.
+
+Quit Chrome completely and open it again before the next listen. Chrome will show "Managed by your organization" because of this policy. Closing the lid, pressing the power button, or choosing Sleep still stops audio.
 
 ## Editing the Package List
 
@@ -134,6 +156,7 @@ This means you never need to hand‑edit the DSC file — just add or remove lin
 | `helpers\Ensure-Winget.psm1` | Helper module to ensure winget is installed and available. |
 | `helpers\Test-WingetEnabled.psm1` | Helper module to test whether winget is enabled. |
 | `helpers\Update-Wsl.psm1` | Helper module to update WSL via web-download and pin `Microsoft.WSL`. |
+| `helpers\LockScreenPlayback.ps1` | Desired state for the Chrome lock-screen playback policy. Does not change the power scheme. |
 
 ## Prerequisites
 
@@ -141,8 +164,25 @@ This means you never need to hand‑edit the DSC file — just add or remove lin
 - **PowerShell:** 7.6 or later
 - **winget:** Windows Package Manager (`winget --version` to verify)
 - **Git:** Required for automatic removal tracking (`git --version` to verify)
-- **Privileges:** Administrator (elevated) PowerShell session
+- **Privileges:** Administrator. See [Elevated session](#elevated-session).
 - **Account:** Microsoft-connected account (for `winget configure` only)
+
+### Elevated session
+
+Lock-screen playback writes `HKLM\SOFTWARE\Policies\Google\Chrome`. It does not change the active power scheme. Package install and `winget configure` need the same rights. Open PowerShell as Administrator before those commands:
+
+1. Open the Start menu and type `PowerShell`.
+2. Right-click **PowerShell 7** (or **Windows PowerShell**) and choose **Run as administrator**.
+3. Approve the User Account Control prompt.
+4. Confirm the window title says **Administrator**.
+5. Change to the clone, then apply:
+
+```powershell
+Set-Location .\winget-configure
+winget configure -f .configurations\configuration.dsc.yaml
+```
+
+Use the path of your clone in `Set-Location`. A window that is not elevated cannot set the Chrome policy. That skip does not stop package installation.
 
 ### Execution Policy
 
@@ -159,13 +199,13 @@ Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 | **`winget` not found** | The `helpers/` modules can bootstrap winget for you. Import `Ensure-Winget.psm1` and run its exported function. |
 | **Microsoft Store / account errors with `winget configure`** | This command requires a Microsoft‑connected account. Switch to [Legacy Mode](#legacy-mode) if you are on a local account. |
 | **Package ID not found** | IDs change over time. Search the [winget-pkgs repository](https://github.com/microsoft/winget-pkgs) for the current ID. |
-| **Permission denied** | Right‑click PowerShell → **Run as Administrator**, then retry. |
+| **Permission denied**, or **Lock-screen playback settings require an elevated PowerShell session** | Close the window and follow [Elevated session](#elevated-session). Retry from the Administrator window. |
 | **DSC file looks stale** | Re‑run `.\New-WingetConfiguration.ps1` after editing `winget-packages.yml`. The DSC file is a generated artifact. |
 | **`Microsoft.WSL` upgrade fails with `0x80073d28`** | Do not retry `winget upgrade Microsoft.WSL`. Run `.\Update-Packages.ps1` (or `wsl --update --web-download`). The configuration pins WSL so `winget upgrade --all` skips it. |
 
 ## Legacy Mode
 
-`Install-Packages.ps1` is an imperative PowerShell installer kept as a fallback for **local (non‑Microsoft) Windows accounts** that cannot use `winget configure`.
+`Install-Packages.ps1` is an imperative PowerShell installer kept as a fallback for **local (non‑Microsoft) Windows accounts** that cannot use `winget configure`. Run it from an [elevated PowerShell window](#elevated-session). It applies the lock-screen playback settings as well as the package list.
 
 ```powershell
 # Install everything defined in winget-packages.yml

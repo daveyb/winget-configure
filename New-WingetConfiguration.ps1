@@ -528,6 +528,28 @@ if ($pins -match '\bMicrosoft\.WSL\b') {
 '@
 }
 
+function Get-LockScreenPlaybackLibrary
+{
+    $path = Join-Path $PSScriptRoot 'helpers\LockScreenPlayback.ps1'
+    if (-not (Test-Path -LiteralPath $path))
+    {
+        throw "Lock-screen playback script not found: $path"
+    }
+
+    return (Get-Content -LiteralPath $path -Raw).TrimEnd()
+}
+
+function Get-LockScreenPlaybackScript
+{
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$Library,
+        [Parameter(Mandatory)][string]$Invocation
+    )
+
+    return ($Library + "`n" + $Invocation)
+}
+
 function Add-WslScriptResource
 {
     [CmdletBinding()]
@@ -642,6 +664,17 @@ function Build-DscYaml
         $null = $sb.AppendLine('        source: winget')
         $null = $sb.AppendLine("        ensure: $ensure")
     }
+
+    # After WinGetPackage resources so a lock-screen failure cannot abort them.
+    $lockLibrary = Get-LockScreenPlaybackLibrary
+    $null = $sb.AppendLine('')
+    $null = $sb.AppendLine('    # -- Lock-screen playback ----------------------------------------------------------------')
+    Add-WslScriptResource -Builder $sb `
+        -ResourceId 'Chrome.LockScreenPlayback' `
+        -Description 'Disable Chrome window occlusion so Pocket Casts can play on the lock screen' `
+        -GetScript (Get-LockScreenPlaybackScript -Library $lockLibrary -Invocation 'return (Get-LockScreenPlaybackReport)') `
+        -TestScript (Get-LockScreenPlaybackScript -Library $lockLibrary -Invocation 'return (Test-LockScreenPlayback)') `
+        -SetScript (Get-LockScreenPlaybackScript -Library $lockLibrary -Invocation 'Set-LockScreenPlayback')
 
     return $sb.ToString()
 }
