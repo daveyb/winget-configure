@@ -389,24 +389,41 @@ Write-ProgressSuccess '✓ winget is ready' -Quiet:$Quiet
 Write-Host ''
 
 # Step 2b: Keep Pocket Casts playing across the lock screen.
-# Same desired state as the Chrome.LockScreenPlayback DSC resource.
+# Same Chrome policy as the Chrome.LockScreenPlayback DSC resource.
+# A failure here must not abort the package run.
 if (-not $Thermonuclear)
 {
     if (-not (Get-Command -Name Set-LockScreenPlayback -ErrorAction SilentlyContinue))
     {
-        Write-Error "Lock-screen playback module not found at: $lockHelperPath"
-        exit 1
+        Write-Warning "Lock-screen playback module not found at: $lockHelperPath. Package installation will continue."
     }
-
-    Write-ProgressInfo 'Configuring lock-screen playback...' -Quiet:$Quiet
-    $lockScreenAlreadySet = Test-LockScreenPlayback
-    Set-LockScreenPlayback
-    if ($lockScreenAlreadySet)
+    else
     {
-        Write-ProgressSuccess 'Lock-screen playback already configured' -Quiet:$Quiet
-    } else
-    {
-        Write-ProgressSuccess 'Lock-screen playback configured. Restart Chrome before the next locked-screen listen.' -Quiet:$Quiet
+        try
+        {
+            Write-ProgressInfo 'Configuring lock-screen playback...' -Quiet:$Quiet
+            $lockScreenAlreadySet = Test-LockScreenPlayback
+            Set-LockScreenPlayback
+            if (Test-LockScreenPlayback)
+            {
+                if ($lockScreenAlreadySet)
+                {
+                    Write-ProgressSuccess 'Lock-screen playback already configured' -Quiet:$Quiet
+                }
+                else
+                {
+                    Write-ProgressSuccess 'Lock-screen playback configured. Restart Chrome before the next locked-screen listen.' -Quiet:$Quiet
+                }
+            }
+            else
+            {
+                Write-Warning 'Lock-screen playback was not applied. Package installation will continue.'
+            }
+        }
+        catch
+        {
+            Write-Warning "Lock-screen playback was not applied. Package installation will continue. $($_.Exception.Message)"
+        }
     }
     Write-Host ''
 }

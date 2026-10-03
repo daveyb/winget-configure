@@ -602,16 +602,6 @@ function Build-DscYaml
     $null = $sb.AppendLine("  configurationVersion: $DSC_SCHEMA_VERSION")
     $null = $sb.AppendLine('  resources:')
 
-    $lockLibrary = Get-LockScreenPlaybackLibrary
-    $null = $sb.AppendLine('')
-    $null = $sb.AppendLine('    # -- Lock-screen playback ----------------------------------------------------------------')
-    Add-WslScriptResource -Builder $sb `
-        -ResourceId 'Chrome.LockScreenPlayback' `
-        -Description 'Disable Chrome window occlusion and keep the lock-screen display timeout at 30 seconds' `
-        -GetScript (Get-LockScreenPlaybackScript -Library $lockLibrary -Invocation 'return (Get-LockScreenPlaybackReport)') `
-        -TestScript (Get-LockScreenPlaybackScript -Library $lockLibrary -Invocation 'return (Test-LockScreenPlayback)') `
-        -SetScript (Get-LockScreenPlaybackScript -Library $lockLibrary -Invocation 'Set-LockScreenPlayback')
-
     $lastCategory = $null
 
     foreach ($entry in $Entries)
@@ -674,6 +664,17 @@ function Build-DscYaml
         $null = $sb.AppendLine('        source: winget')
         $null = $sb.AppendLine("        ensure: $ensure")
     }
+
+    # After WinGetPackage resources so a lock-screen failure cannot abort them.
+    $lockLibrary = Get-LockScreenPlaybackLibrary
+    $null = $sb.AppendLine('')
+    $null = $sb.AppendLine('    # -- Lock-screen playback ----------------------------------------------------------------')
+    Add-WslScriptResource -Builder $sb `
+        -ResourceId 'Chrome.LockScreenPlayback' `
+        -Description 'Disable Chrome window occlusion so Pocket Casts can play on the lock screen' `
+        -GetScript (Get-LockScreenPlaybackScript -Library $lockLibrary -Invocation 'return (Get-LockScreenPlaybackReport)') `
+        -TestScript (Get-LockScreenPlaybackScript -Library $lockLibrary -Invocation 'return (Test-LockScreenPlayback)') `
+        -SetScript (Get-LockScreenPlaybackScript -Library $lockLibrary -Invocation 'Set-LockScreenPlayback')
 
     return $sb.ToString()
 }

@@ -83,12 +83,11 @@ Use `Update-Packages.ps1` instead of `winget upgrade --all`. WSL's winget MSIX i
 
 ## Lock-screen playback
 
-Pocket Casts on Windows is the Chrome app. Chrome suspends a window it decides is covered, including while the screen is locked, and the episode pauses. The generated configuration includes a `Chrome.LockScreenPlayback` script resource that:
+Pocket Casts on Windows is the Chrome app. Chrome suspends a window it decides is covered, including while the screen is locked, and the episode pauses. The generated configuration includes a `Chrome.LockScreenPlayback` script resource after the package resources. It sets Chrome machine policy `HKLM\SOFTWARE\Policies\Google\Chrome\WindowOcclusionEnabled` to `0`.
 
-- sets Chrome machine policy `HKLM\SOFTWARE\Policies\Google\Chrome\WindowOcclusionEnabled` to `0`
-- sets the console lock display-off timeout (`VIDEOCONLOCK`) to 30 seconds on AC and on battery
+It does not rewrite the active power scheme. `VIDEOCONLOCK` is not part of compliance. The policy applies to every user and every Chrome window, and this script does not remove it later.
 
-`Install-Packages.ps1` applies the same settings. Both writes go to machine policy and the active power scheme, so they fail in a normal window. Apply them from an [elevated PowerShell window](#elevated-session):
+`Install-Packages.ps1` applies the same Chrome policy. If that step cannot write the policy, it warns and continues so the package run is not aborted. Apply the policy from an [elevated PowerShell window](#elevated-session):
 
 ```powershell
 winget configure -f .configurations\configuration.dsc.yaml
@@ -100,7 +99,7 @@ Or, for a local account:
 .\Install-Packages.ps1
 ```
 
-The window title must say Administrator. Otherwise `Chrome.LockScreenPlayback` stops with `Lock-screen playback settings require an elevated PowerShell session.`
+The window title must say Administrator. A window that is not elevated skips the Chrome policy write and continues with package installation. The policy is not applied until an elevated run.
 
 Quit Chrome completely and open it again before the next listen. Chrome will show "Managed by your organization" because of this policy. Closing the lid, pressing the power button, or choosing Sleep still stops audio.
 
@@ -157,7 +156,7 @@ This means you never need to hand‑edit the DSC file — just add or remove lin
 | `helpers\Ensure-Winget.psm1` | Helper module to ensure winget is installed and available. |
 | `helpers\Test-WingetEnabled.psm1` | Helper module to test whether winget is enabled. |
 | `helpers\Update-Wsl.psm1` | Helper module to update WSL via web-download and pin `Microsoft.WSL`. |
-| `helpers\LockScreenPlayback.ps1` | Desired state for Chrome lock-screen playback and the 30-second console lock display timeout. |
+| `helpers\LockScreenPlayback.ps1` | Desired state for the Chrome lock-screen playback policy. Does not change the power scheme. |
 
 ## Prerequisites
 
@@ -170,7 +169,7 @@ This means you never need to hand‑edit the DSC file — just add or remove lin
 
 ### Elevated session
 
-Lock-screen playback writes `HKLM\SOFTWARE\Policies\Google\Chrome` and the active power scheme. Package install and `winget configure` need the same rights. Open PowerShell as Administrator before those commands:
+Lock-screen playback writes `HKLM\SOFTWARE\Policies\Google\Chrome`. It does not change the active power scheme. Package install and `winget configure` need the same rights. Open PowerShell as Administrator before those commands:
 
 1. Open the Start menu and type `PowerShell`.
 2. Right-click **PowerShell 7** (or **Windows PowerShell**) and choose **Run as administrator**.
@@ -183,7 +182,7 @@ Set-Location .\winget-configure
 winget configure -f .configurations\configuration.dsc.yaml
 ```
 
-Use the path of your clone in `Set-Location`. A window that is not elevated cannot set the Chrome policy or the 30-second lock-screen timeout.
+Use the path of your clone in `Set-Location`. A window that is not elevated cannot set the Chrome policy. That skip does not stop package installation.
 
 ### Execution Policy
 
