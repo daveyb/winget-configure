@@ -83,11 +83,14 @@ Use `Update-Packages.ps1` instead of `winget upgrade --all`. WSL's winget MSIX i
 
 ## Lock-screen playback
 
-Pocket Casts on Windows is the Chrome app. Chrome suspends a window it decides is covered, including while the screen is locked, and the episode pauses. The generated configuration includes a `Chrome.LockScreenPlayback` script resource after the package resources. It sets Chrome machine policy `HKLM\SOFTWARE\Policies\Google\Chrome\WindowOcclusionEnabled` to `0`.
+Pocket Casts on Windows is the Chrome app. Chrome suspends a window it decides is covered, including while the screen is locked, and the episode pauses. The generated configuration includes a `Chrome.LockScreenPlayback` script resource after the package resources. It:
 
-It does not rewrite the active power scheme. `VIDEOCONLOCK` is not part of compliance. The policy applies to every user and every Chrome window, and this script does not remove it later.
+- sets Chrome machine policy `HKLM\SOFTWARE\Policies\Google\Chrome\WindowOcclusionEnabled` to `0`
+- resets the console lock display-off timeout (`VIDEOCONLOCK`) to 30 seconds on AC and on battery
 
-`Install-Packages.ps1` applies the same Chrome policy. Both the script and `winget configure` need an [elevated PowerShell window](#elevated-session) to write that policy. If `Install-Packages.ps1` is not elevated, it warns and still installs packages. The DSC resource is after the package resources, so a lock-screen failure does not abort them. `winget configure` still reports that resource as failed until an Administrator window applies the policy:
+The policy applies to every user and every Chrome window, and this script does not remove it later.
+
+`Install-Packages.ps1` applies the same settings. Both writes need an [elevated PowerShell window](#elevated-session). If `Install-Packages.ps1` is not elevated, it warns and still installs packages. The DSC resource is after the package resources, so a lock-screen failure does not abort them. `winget configure` still reports that resource as failed until an Administrator window applies it:
 
 ```powershell
 winget configure -f .configurations\configuration.dsc.yaml
@@ -99,7 +102,7 @@ Or, for a local account:
 .\Install-Packages.ps1
 ```
 
-The window title must say Administrator. Otherwise the Chrome policy is not written. Package installation still continues.
+The window title must say Administrator. Otherwise the Chrome policy and the 30-second lock-screen timeout are not written. Package installation still continues.
 
 Quit Chrome completely and open it again before the next listen. Chrome will show "Managed by your organization" because of this policy. Closing the lid, pressing the power button, or choosing Sleep still stops audio.
 
@@ -156,7 +159,7 @@ This means you never need to hand‑edit the DSC file — just add or remove lin
 | `helpers\Ensure-Winget.psm1` | Helper module to ensure winget is installed and available. |
 | `helpers\Test-WingetEnabled.psm1` | Helper module to test whether winget is enabled. |
 | `helpers\Update-Wsl.psm1` | Helper module to update WSL via web-download and pin `Microsoft.WSL`. |
-| `helpers\LockScreenPlayback.ps1` | Desired state for the Chrome lock-screen playback policy. Does not change the power scheme. |
+| `helpers\LockScreenPlayback.ps1` | Desired state for Chrome lock-screen playback and the 30-second console lock display timeout. |
 
 ## Prerequisites
 
@@ -169,7 +172,7 @@ This means you never need to hand‑edit the DSC file — just add or remove lin
 
 ### Elevated session
 
-Lock-screen playback writes `HKLM\SOFTWARE\Policies\Google\Chrome`. It does not change the active power scheme. Package install and `winget configure` need the same rights. Open PowerShell as Administrator before those commands:
+Lock-screen playback writes `HKLM\SOFTWARE\Policies\Google\Chrome` and resets the active power scheme's console lock display timeout to 30 seconds. Package install and `winget configure` need the same rights. Open PowerShell as Administrator before those commands:
 
 1. Open the Start menu and type `PowerShell`.
 2. Right-click **PowerShell 7** (or **Windows PowerShell**) and choose **Run as administrator**.
@@ -182,7 +185,7 @@ Set-Location .\winget-configure
 winget configure -f .configurations\configuration.dsc.yaml
 ```
 
-Use the path of your clone in `Set-Location`. A window that is not elevated cannot set the Chrome policy. That skip does not stop package installation.
+Use the path of your clone in `Set-Location`. A window that is not elevated cannot set the Chrome policy or the 30-second lock-screen timeout. That skip does not stop package installation.
 
 ### Execution Policy
 

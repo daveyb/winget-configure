@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.19] - 2026-10-03
+
+### Fixed
+- Pocket Casts lock-screen playback resets the console lock display-off timeout (`VIDEOCONLOCK`) to 30 seconds on AC and battery, and sets Chrome machine policy `WindowOcclusionEnabled` to 0. Run `winget configure` or `Install-Packages.ps1` from an Administrator PowerShell window. If that window is not elevated, `Install-Packages.ps1` warns and package installation continues. Restart Chrome before the next locked-screen listen.
+
 ## [1.1.18] - 2026-10-03
 
 ### Fixed
