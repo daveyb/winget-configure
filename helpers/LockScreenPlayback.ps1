@@ -5,9 +5,10 @@
 # which pauses playback. Chrome policy WindowOcclusionEnabled = 0 disables
 # that detection.
 #
-# The policy is written to HKLM\SOFTWARE\Policies\Google\Chrome. winget
-# configure runs elevated, and HKCU\Software\Policies is not writable by the
-# signed-in user. Chrome applies this machine policy to every user.
+# The policy is written to HKLM\SOFTWARE\Policies\Google\Chrome in the
+# 64-bit registry view. CreateSubKey creates the Google and Chrome keys
+# when they are missing. winget configure runs elevated. Chrome applies
+# this machine policy to every user.
 #
 # VIDEOCONLOCK is the console lock display-off timeout, in seconds. This
 # script resets that timeout to 30 seconds on AC and on battery. It does
@@ -19,7 +20,7 @@
 
 Set-StrictMode -Version Latest
 
-$script:ChromePolicyKey = 'HKLM:\SOFTWARE\Policies\Google\Chrome'
+$script:ChromePolicySubKey = 'SOFTWARE\Policies\Google\Chrome'
 $script:ChromePolicyName = 'WindowOcclusionEnabled'
 $script:LockDisplayOffTimeoutSeconds = 30
 $script:VideoSubgroup = 'SUB_VIDEO'
@@ -59,11 +60,11 @@ function Get-ConsoleLockDisplayOffTimeout
     $dc = $null
     if ($query.Output -match 'AC Power Setting Index:\s*0x([0-9A-Fa-f]+)')
     {
-        $ac = [Convert]::ToInt32($Matches[1], 16)
+        $ac = [Convert]::ToInt64($Matches[1], 16)
     }
     if ($query.Output -match 'DC Power Setting Index:\s*0x([0-9A-Fa-f]+)')
     {
-        $dc = [Convert]::ToInt32($Matches[1], 16)
+        $dc = [Convert]::ToInt64($Matches[1], 16)
     }
 
     return @{
@@ -73,29 +74,80 @@ function Get-ConsoleLockDisplayOffTimeout
     }
 }
 
+function Open-ChromePolicyHive
+{
+    [CmdletBinding()]
+    param()
+
+    return [Microsoft.Win32.RegistryKey]::OpenBaseKey(
+        [Microsoft.Win32.RegistryHive]::LocalMachine,
+        [Microsoft.Win32.RegistryView]::Registry64)
+}
+
 function Get-ChromeWindowOcclusionPolicy
 {
     [CmdletBinding()]
     param()
 
-    if (-not (Test-Path -LiteralPath $script:ChromePolicyKey))
+    $base = Open-ChromePolicyHive
+    try
     {
-        return $null
-    }
+        $key = $base.OpenSubKey($script:ChromePolicySubKey)
+        if ($null -eq $key)
+        {
+            return $null
+        }
 
-    $prop = Get-ItemProperty -Path $script:ChromePolicyKey -Name $script:ChromePolicyName -ErrorAction SilentlyContinue
-    if ($null -eq $prop)
+        try
+        {
+            $value = $key.GetValue($script:ChromePolicyName, $null)
+            if ($null -eq $value)
+            {
+                return $null
+            }
+
+            return [int]$value
+        }
+        finally
+        {
+            $key.Dispose()
+        }
+    }
+    finally
     {
-        return $null
+        $base.Dispose()
     }
+}
 
-    $named = $prop.PSObject.Properties[$script:ChromePolicyName]
-    if ($null -eq $named)
+function Set-ChromeWindowOcclusionPolicy
+{
+    [CmdletBinding()]
+    param()
+
+    $base = Open-ChromePolicyHive
+    try
     {
-        return $null
+        # CreateSubKey creates Policies\Google\Chrome when those keys are missing.
+        $key = $base.CreateSubKey($script:ChromePolicySubKey)
+        try
+        {
+            $key.SetValue(
+                $script:ChromePolicyName,
+                0,
+                [Microsoft.Win32.RegistryValueKind]::DWord)
+        }
+        finally
+        {
+            if ($null -ne $key)
+            {
+                $key.Dispose()
+            }
+        }
     }
-
-    return [int]$named.Value
+    finally
+    {
+        $base.Dispose()
+    }
 }
 
 function Get-LockScreenPlaybackReport
@@ -159,8 +211,7 @@ function Set-LockScreenPlayback
 
     if ((Get-ChromeWindowOcclusionPolicy) -ne 0)
     {
-        New-Item -Path $script:ChromePolicyKey -Force | Out-Null
-        New-ItemProperty -Path $script:ChromePolicyKey -Name $script:ChromePolicyName -PropertyType DWord -Value 0 -Force | Out-Null
+        Set-ChromeWindowOcclusionPolicy
     }
 
     $timeout = Get-ConsoleLockDisplayOffTimeout
