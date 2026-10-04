@@ -123,7 +123,7 @@ oh-my-posh --init --shell pwsh --config https://raw.githubusercontent.com/JanDeD
 Import-Module -Name Terminal-Icons
 ```
 
-`JanDeDobbeleer.OhMyPosh` is already installed by winget. Terminal-Icons comes from PSGallery for the current user. The install marks the PSGallery repository Trusted for the current user.
+`Microsoft.PowerShell`, `Microsoft.WindowsTerminal`, and `JanDeDobbeleer.OhMyPosh` are winget packages. `Shell.Profile` depends on those three, so it does not run until they are present. Terminal-Icons comes from PSGallery for the current user only. The install marks PSGallery Trusted for that call, then restores the previous InstallationPolicy. It does not leave PSGallery Trusted. `Uninstall-Module -Name Terminal-Icons -Scope CurrentUser` removes the module.
 
 The font files come from the Nerd Fonts 3.5.1 Departure Mono zip. They are registered in the current user's Fonts folder, not in `C:\Windows\Fonts`. The Windows Terminal face is `DepartureMono Nerd Font`. `profiles.defaults.font.face` is set to that name. Font settings on individual profiles are removed so the default face applies to every profile.
 
@@ -131,7 +131,7 @@ PowerShell is the profile named `PowerShell` from `Windows.Terminal.PowershellCo
 
 `winget configure` can run that script as a script block under Windows PowerShell 5.1. The block has no path, so the resource writes it to a temp file and relaunches it with pwsh before Test, Set, or Get.
 
-`Install-Packages.ps1` runs these steps after the package loop. If the step fails, the script warns and package installation still finishes. Open a new Windows Terminal tab to see the prompt and the font.
+`Install-Packages.ps1` runs these steps after the package loop, and only if `Microsoft.PowerShell`, `Microsoft.WindowsTerminal`, and `JanDeDobbeleer.OhMyPosh` succeeded. If the step fails, the script warns and package installation still finishes. Open a new Windows Terminal tab to see the prompt and the font.
 
 ## Editing the Package List
 

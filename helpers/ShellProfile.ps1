@@ -8,6 +8,11 @@
 # Fonts are registered for the current user. An elevated DSC securityContext
 # makes every WinGetPackage fail with "The file name is too long."
 #
+# Terminal-Icons is installed for the current user from PSGallery. Trust is
+# raised only for that Install-Module call, then the previous
+# InstallationPolicy is restored. It does not leave PSGallery Trusted.
+# Uninstall-Module -Name Terminal-Icons -Scope CurrentUser removes it.
+#
 # profiles.defaults.font does not replace a font set on a profile. Those
 # per-profile font keys are removed so the default face applies to every
 # profile. defaultProfile is the profile a new tab opens. List order is the
@@ -1390,12 +1395,22 @@ if ($nuget.Count -eq 0) {
     Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force -Scope CurrentUser | Out-Null
 }
 $repo = Get-PSRepository -Name PSGallery -ErrorAction Stop
-if ($repo.InstallationPolicy -ne "Trusted") {
-    Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
+$previousPolicy = [string]$repo.InstallationPolicy
+$changedPolicy = $false
+try {
+    if ($previousPolicy -ne "Trusted") {
+        Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
+        $changedPolicy = $true
+    }
+    Install-Module -Name Terminal-Icons -Repository PSGallery -Scope CurrentUser -Force -AllowClobber
+    if (-not (Get-Module -ListAvailable -Name Terminal-Icons)) {
+        throw "Terminal-Icons is not installed"
+    }
 }
-Install-Module -Name Terminal-Icons -Repository PSGallery -Scope CurrentUser -Force -AllowClobber
-if (-not (Get-Module -ListAvailable -Name Terminal-Icons)) {
-    throw "Terminal-Icons is not installed"
+finally {
+    if ($changedPolicy) {
+        Set-PSRepository -Name PSGallery -InstallationPolicy $previousPolicy
+    }
 }
 '@
     $encoding = New-Object System.Text.UTF8Encoding $false

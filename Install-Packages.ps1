@@ -504,11 +504,32 @@ foreach ($package in $PackageList)
 }
 
 # Step 4: PowerShell profile, Terminal-Icons, Departure Mono, Windows Terminal.
-# Same desired state as the Shell.Profile DSC resource. A failure here must
-# not abort the package run.
+# Same desired state as the Shell.Profile DSC resource, which dependsOn
+# Microsoft.PowerShell, Microsoft.WindowsTerminal, and JanDeDobbeleer.OhMyPosh.
+# Skip the step unless those three succeeded. A failure here must not abort
+# the package run.
 if (-not $Thermonuclear)
 {
-    if (-not (Get-Command -Name Set-ShellProfile -ErrorAction SilentlyContinue))
+    $shellPackageIds = @(
+        'Microsoft.PowerShell',
+        'Microsoft.WindowsTerminal',
+        'JanDeDobbeleer.OhMyPosh'
+    )
+    $missingShellPackages = @()
+    foreach ($shellPackageId in $shellPackageIds)
+    {
+        $shellResult = @($results | Where-Object { $_.PackageId -eq $shellPackageId -and $_.Success })
+        if ($shellResult.Count -eq 0)
+        {
+            $missingShellPackages += $shellPackageId
+        }
+    }
+
+    if ($missingShellPackages.Count -gt 0)
+    {
+        Write-Warning ("Shell profile was not applied. These packages must succeed first: {0}. Package installation will continue." -f ($missingShellPackages -join ', '))
+    }
+    elseif (-not (Get-Command -Name Set-ShellProfile -ErrorAction SilentlyContinue))
     {
         Write-Warning "Shell profile module not found at: $shellHelperPath. Package installation will continue."
     }

@@ -368,6 +368,14 @@ function Read-DscEnsureMap
 
 $WSL_PACKAGE_ID = 'Microsoft.WSL'
 
+# Shell.Profile rewrites the PowerShell 7 profile and Windows Terminal
+# settings. Those edits wait until these packages are present.
+$SHELL_PACKAGE_IDS = @(
+    'Microsoft.PowerShell',
+    'Microsoft.WindowsTerminal',
+    'JanDeDobbeleer.OhMyPosh'
+)
+
 function Add-YamlBlockScalar
 {
     [CmdletBinding()]
@@ -570,12 +578,21 @@ function Add-WslScriptResource
         [Parameter(Mandatory)][string]$Description,
         [Parameter(Mandatory)][string]$GetScript,
         [Parameter(Mandatory)][string]$TestScript,
-        [Parameter(Mandatory)][string]$SetScript
+        [Parameter(Mandatory)][string]$SetScript,
+        [string[]]$DependsOn
     )
 
     $null = $Builder.AppendLine('')
     $null = $Builder.AppendLine('    - resource: PSDscResources/Script')
     $null = $Builder.AppendLine("      id: $ResourceId")
+    if ($DependsOn -and $DependsOn.Count -gt 0)
+    {
+        $null = $Builder.AppendLine('      dependsOn:')
+        foreach ($dependency in $DependsOn)
+        {
+            $null = $Builder.AppendLine("        - $dependency")
+        }
+    }
     $null = $Builder.AppendLine('      directives:')
     $null = $Builder.AppendLine("        description: $Description")
     $null = $Builder.AppendLine('        allowPrerelease: true')
@@ -667,6 +684,10 @@ function Build-DscYaml
             $null = $sb.AppendLine('      dependsOn:')
             $null = $sb.AppendLine('        - Microsoft.WSL.Unpin')
         }
+        if ($ensure -eq 'Present' -and $SHELL_PACKAGE_IDS -contains $entry.Id)
+        {
+            $null = $sb.AppendLine("      id: $($entry.Id)")
+        }
         $null = $sb.AppendLine('      directives:')
         $null = $sb.AppendLine("        description: $desc")
         $null = $sb.AppendLine('        allowPrerelease: true')
@@ -693,6 +714,7 @@ function Build-DscYaml
     $null = $sb.AppendLine('    # -- Shell profile ----------------------------------------------------------------')
     Add-WslScriptResource -Builder $sb `
         -ResourceId 'Shell.Profile' `
+        -DependsOn $SHELL_PACKAGE_IDS `
         -Description 'Write the PowerShell 7 profile, install Terminal-Icons and Departure Mono, and put PowerShell first in Windows Terminal' `
         -GetScript (Get-EmbeddedScript -Library $shellLibrary -Invocation 'return (Get-ShellProfileReport)') `
         -TestScript (Get-EmbeddedScript -Library $shellLibrary -Invocation 'return (Test-ShellProfile)') `
