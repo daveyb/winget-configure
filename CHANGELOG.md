@@ -8,7 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.1.21] - 2026-10-03
 
 ### Fixed
-- `winget configure` no longer marks `Chrome.LockScreenPlayback` with `securityContext: elevated`. That directive made every unit fail with `0x8007006F` (`-2147024785`), "The file name is too long." Run `winget configure` from an Administrator PowerShell window so the Chrome policy and the 30-second timeout are written.
+- `winget configure` no longer marks `Chrome.LockScreenPlayback` with `securityContext: elevated`. That directive made every unit fail with `0x8007006F` (`-2147024785`), "The file name is too long."
+- The lock-screen resource shows its own User Account Control prompt and applies the Chrome policy and the 30-second timeout from that elevated process. Run `winget configure` from a normal PowerShell window and approve the prompt. Running the whole command as Administrator makes `WinGetPackage` fail with "Failed to create instance."
 
 ## [1.1.20] - 2026-10-03
 

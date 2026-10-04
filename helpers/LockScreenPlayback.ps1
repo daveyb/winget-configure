@@ -16,11 +16,12 @@
 # AC and on battery. powercfg /qh is queried for that setting only, and the
 # current AC and DC indexes are the last two hex values in its block.
 #
-# Set throws when it is not elevated or the write does not stick.
-# Install-Packages.ps1 catches that and continues with packages.
-# Run winget configure from an Administrator PowerShell window. A
-# per-resource securityContext of elevated makes this configuration fail
-# every unit with "The file name is too long."
+# Set shows a User Account Control prompt when the current process is not
+# elevated, then applies the writes from that elevated process. Do not mark
+# this resource securityContext elevated, and do not run the whole
+# winget configure command as Administrator. That fails WinGetPackage with
+# "Failed to create instance." Install-Packages.ps1 catches a dismissed
+# prompt and continues with packages.
 #
 # Chrome must be restarted before an already-open browser picks up the
 # policy. Closing the lid, pressing the power button, or choosing Sleep
@@ -289,6 +290,115 @@ function Test-LockScreenPlayback
     }
 }
 
+function Test-IsElevatedSession
+{
+    [CmdletBinding()]
+    param()
+
+    $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+    $principal = New-Object Security.Principal.WindowsPrincipal($identity)
+    return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+}
+
+function Get-LockScreenPlaybackWorkerScript
+{
+    [CmdletBinding()]
+    param()
+
+    $functionNames = @(
+        'Invoke-PowerCfg',
+        'Get-PowerCfgSettingBlock',
+        'Get-ConsoleLockDisplayOffTimeout',
+        'Open-ChromePolicyHive',
+        'Get-ChromeWindowOcclusionPolicy',
+        'Set-ChromeWindowOcclusionPolicy',
+        'Get-LockScreenPlaybackReport',
+        'Test-LockScreenPlayback',
+        'Test-IsElevatedSession',
+        'Set-LockScreenPlayback'
+    )
+
+    $builder = New-Object System.Text.StringBuilder
+    [void]$builder.AppendLine('param([Parameter(Mandatory)][string]$ResultPath)')
+    [void]$builder.AppendLine('$ErrorActionPreference = ''Stop''')
+    [void]$builder.AppendLine('Set-StrictMode -Version Latest')
+    [void]$builder.AppendLine('$env:LOCK_SCREEN_PLAYBACK_WORKER = ''1''')
+    [void]$builder.AppendLine("`$script:ChromePolicySubKey = '$($script:ChromePolicySubKey)'")
+    [void]$builder.AppendLine("`$script:ChromePolicyName = '$($script:ChromePolicyName)'")
+    [void]$builder.AppendLine("`$script:VideoSubgroup = '$($script:VideoSubgroup)'")
+    [void]$builder.AppendLine("`$script:ConsoleLockTimeoutSetting = '$($script:ConsoleLockTimeoutSetting)'")
+    [void]$builder.AppendLine("`$script:ConsoleLockTimeoutGuid = '$($script:ConsoleLockTimeoutGuid)'")
+    [void]$builder.AppendLine("`$script:LockDisplayOffTimeoutSeconds = $($script:LockDisplayOffTimeoutSeconds)")
+    foreach ($functionName in $functionNames)
+    {
+        $command = Get-Command -Name $functionName -CommandType Function
+        [void]$builder.AppendLine($command.ScriptBlock.Ast.Extent.Text)
+        [void]$builder.AppendLine()
+    }
+    [void]$builder.AppendLine('try {')
+    [void]$builder.AppendLine('    Set-LockScreenPlayback')
+    [void]$builder.AppendLine('    if (-not (Test-LockScreenPlayback)) { throw ''Lock-screen playback settings were not applied.'' }')
+    [void]$builder.AppendLine('    Set-Content -LiteralPath $ResultPath -Value ''OK'' -Encoding ASCII')
+    [void]$builder.AppendLine('    exit 0')
+    [void]$builder.AppendLine('}')
+    [void]$builder.AppendLine('catch {')
+    [void]$builder.AppendLine('    Set-Content -LiteralPath $ResultPath -Value $_.Exception.Message -Encoding ASCII')
+    [void]$builder.AppendLine('    exit 1')
+    [void]$builder.AppendLine('}')
+    return $builder.ToString()
+}
+
+function Start-LockScreenPlaybackElevated
+{
+    [CmdletBinding()]
+    param()
+
+    $directory = Join-Path $env:TEMP ("LockScreenPlayback-" + [guid]::NewGuid().ToString('n'))
+    New-Item -ItemType Directory -Path $directory | Out-Null
+    $scriptPath = Join-Path $directory 'apply.ps1'
+    $resultPath = Join-Path $directory 'result.txt'
+    $powershell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+    Set-Content -LiteralPath $scriptPath -Value (Get-LockScreenPlaybackWorkerScript) -Encoding ASCII
+
+    try
+    {
+        $process = Start-Process -FilePath $powershell -ArgumentList @(
+            '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $scriptPath, '-ResultPath', $resultPath
+        ) -Verb RunAs -PassThru
+        if ($null -eq $process)
+        {
+            throw 'Lock-screen playback did not start the elevated PowerShell process.'
+        }
+        $process.WaitForExit()
+        $result = ''
+        if (Test-Path -LiteralPath $resultPath)
+        {
+            $result = (Get-Content -LiteralPath $resultPath -Raw).Trim()
+        }
+        if ($process.ExitCode -ne 0 -or $result -ne 'OK')
+        {
+            if ([string]::IsNullOrWhiteSpace($result))
+            {
+                $result = "elevated PowerShell exited $($process.ExitCode)"
+            }
+            throw "Lock-screen playback settings were not applied. $result"
+        }
+    }
+    catch
+    {
+        $message = $_.Exception.Message
+        if ($message -match 'canceled by the user')
+        {
+            throw 'Lock-screen playback settings require an elevated PowerShell session. Approve the administrator prompt.'
+        }
+        throw
+    }
+    finally
+    {
+        Remove-Item -LiteralPath $directory -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
 function Set-LockScreenPlayback
 {
     [CmdletBinding()]
@@ -299,12 +409,19 @@ function Set-LockScreenPlayback
         return
     }
 
-    $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
-    $principal = New-Object Security.Principal.WindowsPrincipal($identity)
-    $isAdmin = $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-    if (-not $isAdmin)
+    if (-not (Test-IsElevatedSession))
     {
-        throw 'Lock-screen playback settings require an elevated PowerShell session.'
+        if ($env:LOCK_SCREEN_PLAYBACK_WORKER -eq '1')
+        {
+            throw 'Lock-screen playback settings require an elevated PowerShell session. Approve the administrator prompt.'
+        }
+
+        Start-LockScreenPlaybackElevated
+        if (-not (Test-LockScreenPlayback))
+        {
+            throw 'Lock-screen playback settings were not applied.'
+        }
+        return
     }
 
     if ((Get-ChromeWindowOcclusionPolicy) -ne 0)
