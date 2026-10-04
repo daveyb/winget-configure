@@ -446,9 +446,13 @@ function Start-LockScreenPlaybackElevated
     ) -join ' '
 
     $handleMessage = $null
+    $process = $null
+    # A RunAs handle often cannot see the elevated process. Do not delete
+    # apply.ps1 until that process has written the result file, or the
+    # deadline has passed.
+    $mayDelete = $false
     try
     {
-        $process = $null
         try
         {
             $process = Start-Process -FilePath $hostPath -ArgumentList $arguments -Verb RunAs -PassThru
@@ -463,71 +467,60 @@ function Start-LockScreenPlaybackElevated
             $handleMessage = 'Lock-screen playback did not start the elevated PowerShell process.'
         }
 
-        if ($null -ne $process)
+        if ($null -eq $process)
         {
-            # WaitForExit and ExitCode throw (access denied, or the handle was
-            # not started by this object) even after the elevated script wrote
-            # OK. The result file is the only success signal. Do not read
-            # ExitCode, and do not fail a completed OK write.
-            $deadline = [datetime]::UtcNow.AddMinutes(10)
-            while ([datetime]::UtcNow -lt $deadline)
+            # Nothing is writing. A dismissed consent prompt never starts the worker.
+            $mayDelete = $true
+            if ($handleMessage -match 'canceled by the user')
             {
-                $pending = Read-LockScreenPlaybackResult -Path $resultPath
-                if (-not [string]::IsNullOrWhiteSpace($pending))
-                {
-                    break
-                }
+                throw 'Lock-screen playback settings require an elevated PowerShell session. Approve the administrator prompt.'
+            }
 
-                try
+            throw "Lock-screen playback settings were not applied. $handleMessage"
+        }
+
+        # Poll until the result file is non-empty or the deadline passes.
+        # WaitForExit can return immediately while pwsh is still starting or
+        # still running powercfg. That is not completion and not failure.
+        # Do not read ExitCode.
+        $deadline = [datetime]::UtcNow.AddMinutes(10)
+        $result = ''
+        while ([datetime]::UtcNow -lt $deadline)
+        {
+            $result = Read-LockScreenPlaybackResult -Path $resultPath
+            if (-not [string]::IsNullOrWhiteSpace($result))
+            {
+                break
+            }
+
+            try
+            {
+                # A false early exit must not end the wait, and must not busy-spin.
+                if ($process.WaitForExit(500))
                 {
-                    if ($process.WaitForExit(500))
-                    {
-                        break
-                    }
+                    Start-Sleep -Milliseconds 500
                 }
-                catch
-                {
-                    $handleMessage = $_.Exception.Message
-                    Start-Sleep -Milliseconds 250
-                }
+            }
+            catch
+            {
+                Start-Sleep -Milliseconds 500
             }
         }
 
-        $result = Read-LockScreenPlaybackResult -Path $resultPath
-        if ($result -ne 'OK')
+        if ([string]::IsNullOrWhiteSpace($result))
         {
-            # The elevated script writes OK and then exits. A handle error can
-            # surface before that write is visible. Retry before failing a
-            # completed apply. finally must not delete the file first.
-            foreach ($delay in @(200, 400, 800))
-            {
-                if (-not [string]::IsNullOrWhiteSpace($result))
-                {
-                    break
-                }
-
-                Start-Sleep -Milliseconds $delay
-                $result = Read-LockScreenPlaybackResult -Path $resultPath
-            }
+            $result = Read-LockScreenPlaybackResult -Path $resultPath
         }
+
+        $mayDelete = $true
 
         if ($result -eq 'OK')
         {
             return
         }
 
-        if ($handleMessage -and $handleMessage -match 'canceled by the user')
-        {
-            throw 'Lock-screen playback settings require an elevated PowerShell session. Approve the administrator prompt.'
-        }
-
         if ([string]::IsNullOrWhiteSpace($result))
         {
-            if (-not [string]::IsNullOrWhiteSpace($handleMessage))
-            {
-                throw "Lock-screen playback settings were not applied. $handleMessage"
-            }
-
             throw 'Lock-screen playback settings were not applied.'
         }
 
@@ -535,7 +528,10 @@ function Start-LockScreenPlaybackElevated
     }
     finally
     {
-        Remove-Item -LiteralPath $directory -Recurse -Force -ErrorAction SilentlyContinue
+        if ($mayDelete)
+        {
+            Remove-Item -LiteralPath $directory -Recurse -Force -ErrorAction SilentlyContinue
+        }
     }
 }
 
