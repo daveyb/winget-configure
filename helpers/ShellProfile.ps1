@@ -249,9 +249,25 @@ function Get-JsonObjectString
 
     # JsonNode.ToString() is JSON text. A string field comes back quoted, so
     # "PowerShell" does not match the profile name and a second profile is inserted.
+    # GetValue[string]() does not parse on Windows PowerShell 5.1, and that host
+    # must parse this file before it can relaunch with pwsh. Reflection is the
+    # same GetValue<string>() call without the 7-only syntax.
     try
     {
-        return [string]$value.GetValue[string]()
+        $method = $null
+        foreach ($candidate in @($value.GetType().GetMethods()))
+        {
+            if ($candidate.Name -eq 'GetValue' -and $candidate.IsGenericMethodDefinition)
+            {
+                $method = $candidate
+                break
+            }
+        }
+        if ($null -eq $method)
+        {
+            return ''
+        }
+        return [string]$method.MakeGenericMethod([string]).Invoke($value, @())
     }
     catch
     {
