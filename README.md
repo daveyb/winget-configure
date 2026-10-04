@@ -110,6 +110,27 @@ Approve the prompt when it appears. The PowerShell window itself stays a normal 
 
 Quit Chrome completely and open it again before the next listen. Chrome will show "Managed by your organization" because of this policy. Closing the lid, pressing the power button, or choosing Sleep still stops audio.
 
+## Shell profile
+
+`winget configure` writes the PowerShell 7 profile, installs Terminal-Icons, installs Departure Mono, and sets that font on every Windows Terminal profile. PowerShell is the first profile in the list, and new tabs open it.
+
+The profile file is the PowerShell 7 `$PROFILE`. The usual path is `Documents\PowerShell\Microsoft.PowerShell_profile.ps1`. The file is replaced with this text.
+
+```powershell
+oh-my-posh --init --shell pwsh --config https://raw.githubusercontent.com/JanDeDobbeleer/oh-my-posh/refs/heads/main/themes/marcduiker.omp.json | Invoke-Expression
+
+# Install-Module -Name Terminal-Icons -Repository PSGallery
+Import-Module -Name Terminal-Icons
+```
+
+`JanDeDobbeleer.OhMyPosh` is already installed by winget. Terminal-Icons comes from PSGallery for the current user. The install marks the PSGallery repository Trusted for the current user.
+
+The font files come from the Nerd Fonts 3.5.1 Departure Mono zip. They are registered in the current user's Fonts folder, not in `C:\Windows\Fonts`. The Windows Terminal face is `DepartureMono Nerd Font`. `profiles.defaults.font.face` is set to that name. Font settings on individual profiles are removed so the default face applies to every profile.
+
+PowerShell is the profile named `PowerShell` from `Windows.Terminal.PowershellCore`. It is moved to the start of `profiles.list`. `defaultProfile` is set to that profile's guid. Windows PowerShell stays in the list after it.
+
+`Install-Packages.ps1` runs these steps after the package loop. If the step fails, the script warns and package installation still finishes. Open a new Windows Terminal tab to see the prompt and the font.
+
 ## Editing the Package List
 
 Open `winget-packages.yml` and add, remove, or reorganise entries under any category:
@@ -164,6 +185,7 @@ This means you never need to hand‑edit the DSC file — just add or remove lin
 | `helpers\Test-WingetEnabled.psm1` | Helper module to test whether winget is enabled. |
 | `helpers\Update-Wsl.psm1` | Helper module to update WSL via web-download and pin `Microsoft.WSL`. |
 | `helpers\LockScreenPlayback.ps1` | Desired state for Chrome lock-screen playback and the 30-second console lock display timeout. |
+| `helpers\ShellProfile.ps1` | Desired state for the PowerShell 7 profile, Terminal-Icons, Departure Mono, and the Windows Terminal profile list. |
 
 ## Prerequisites
 

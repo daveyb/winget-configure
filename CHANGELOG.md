@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-10-04
+
+### Added
+- `Shell.Profile` writes the PowerShell 7 `$PROFILE` with the oh-my-posh marcduiker init and `Import-Module Terminal-Icons`. The profile file is replaced with that text.
+- Terminal-Icons is installed from PSGallery for the current user. That install marks PSGallery Trusted for the current user. `JanDeDobbeleer.OhMyPosh` stays a winget package.
+- Departure Mono Nerd Font 3.5.1 is downloaded from the pinned Nerd Fonts zip and registered in the per-user Fonts folder. Windows Terminal `profiles.defaults` uses the face `DepartureMono Nerd Font`. Font settings on individual profiles are removed so every profile uses that face.
+- The Windows Terminal profile list puts PowerShell first, and `defaultProfile` opens that profile. Windows PowerShell stays later in the list.
+- `Install-Packages.ps1` applies the same steps after the package loop. If that step fails, the script warns and package installation continues.
+
 ## [1.1.21] - 2026-10-03
 
 ### Fixed
