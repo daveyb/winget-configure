@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.20] - 2026-10-03
+
+### Fixed
+- `Chrome.LockScreenPlayback` declares `securityContext: elevated`. `winget configure` requests administrator approval for the Chrome policy and the 30-second lock-screen timeout when the window is not already elevated. Approve that prompt. `Install-Packages.ps1` still has to be started from an Administrator PowerShell window.
+
 ## [1.1.19] - 2026-10-03
 
 ### Fixed
