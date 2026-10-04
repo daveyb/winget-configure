@@ -11,16 +11,13 @@
 # this machine policy to every user. This script does not remove the value
 # later.
 #
-# VIDEOCONLOCK (8ec4b3a5-6868-48c2-be75-4f3044be88a7) is not part of
-# compliance. This script does not rewrite the active power scheme.
-# Get-ConsoleLockDisplayOffTimeout is diagnostic only. powercfg /qh is
-# scheme plus subgroup; a setting argument is ignored, so the reader uses
-# only the block after the VIDEOCONLOCK alias or GUID. A missing block
-# includes powercfg stdout in the error. Test and Set ignore that timeout.
+# VIDEOCONLOCK (8ec4b3a5-6868-48c2-be75-4f3044be88a7) is the console lock
+# display-off timeout, in seconds. This script resets it to 30 seconds on
+# AC and on battery. powercfg /qh is queried for that setting only, and the
+# current AC and DC indexes are the last two hex values in its block.
 #
-# Set throws when it is not elevated or the Chrome policy write does not
-# stick. The DSC resource is emitted after WinGetPackage resources.
-# Install-Packages.ps1 catches the error and continues with packages.
+# Set throws when it is not elevated or the write does not stick.
+# Install-Packages.ps1 catches that and continues with packages.
 #
 # Chrome must be restarted before an already-open browser picks up the
 # policy. Closing the lid, pressing the power button, or choosing Sleep
@@ -33,6 +30,7 @@ $script:ChromePolicyName = 'WindowOcclusionEnabled'
 $script:VideoSubgroup = 'SUB_VIDEO'
 $script:ConsoleLockTimeoutSetting = 'VIDEOCONLOCK'
 $script:ConsoleLockTimeoutGuid = '8ec4b3a5-6868-48c2-be75-4f3044be88a7'
+$script:LockDisplayOffTimeoutSeconds = 30
 
 function Invoke-PowerCfg
 {
@@ -91,7 +89,7 @@ function Get-PowerCfgSettingBlock
     for ($j = $start + 1; $j -lt $lines.Count; $j++)
     {
         $line = $lines[$j]
-        $otherGuid = $line -match '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}'
+        $otherGuid = $line -match '[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}'
         if ($otherGuid -and $line -notmatch [regex]::Escape($Guid))
         {
             break
@@ -108,11 +106,10 @@ function Get-ConsoleLockDisplayOffTimeout
     [CmdletBinding()]
     param()
 
-    # /qh is scheme + subgroup only. The setting argument is ignored, so a
-    # subgroup-wide query lists other display settings first. Parse only the
-    # VIDEOCONLOCK block so those indexes are not treated as this timeout.
+    # Ask for VIDEOCONLOCK itself. A subgroup-wide /qh lists other display
+    # settings first, and their indexes are not this timeout.
     $query = Invoke-PowerCfg -ArgumentList @(
-        '/qh', 'SCHEME_CURRENT', $script:VideoSubgroup
+        '/qh', 'SCHEME_CURRENT', $script:VideoSubgroup, $script:ConsoleLockTimeoutGuid
     )
     $stdout = [string]$query.Output
     if ($null -eq $query.ExitCode -or $query.ExitCode -ne 0)
@@ -266,7 +263,22 @@ function Test-LockScreenPlayback
 
     try
     {
-        return (Get-ChromeWindowOcclusionPolicy) -eq 0
+        if ((Get-ChromeWindowOcclusionPolicy) -ne 0)
+        {
+            return $false
+        }
+
+        $timeout = Get-ConsoleLockDisplayOffTimeout
+        if ($timeout.AcSeconds -ne $script:LockDisplayOffTimeoutSeconds)
+        {
+            return $false
+        }
+        if ($timeout.DcSeconds -ne $script:LockDisplayOffTimeoutSeconds)
+        {
+            return $false
+        }
+
+        return $true
     }
     catch
     {
@@ -292,7 +304,47 @@ function Set-LockScreenPlayback
         throw 'Lock-screen playback settings require an elevated PowerShell session.'
     }
 
-    Set-ChromeWindowOcclusionPolicy
+    if ((Get-ChromeWindowOcclusionPolicy) -ne 0)
+    {
+        Set-ChromeWindowOcclusionPolicy
+    }
+
+    $timeout = Get-ConsoleLockDisplayOffTimeout
+    $timeoutChanged = $false
+    $seconds = [string]$script:LockDisplayOffTimeoutSeconds
+
+    if ($timeout.AcSeconds -ne $script:LockDisplayOffTimeoutSeconds)
+    {
+        $ac = Invoke-PowerCfg -ArgumentList @(
+            '/setacvalueindex', 'SCHEME_CURRENT', $script:VideoSubgroup, $script:ConsoleLockTimeoutGuid, $seconds
+        )
+        if ($ac.ExitCode -ne 0)
+        {
+            throw "powercfg failed to set the AC console lock display timeout (exit $($ac.ExitCode)).`n$($ac.Output)"
+        }
+        $timeoutChanged = $true
+    }
+
+    if ($timeout.DcSeconds -ne $script:LockDisplayOffTimeoutSeconds)
+    {
+        $dc = Invoke-PowerCfg -ArgumentList @(
+            '/setdcvalueindex', 'SCHEME_CURRENT', $script:VideoSubgroup, $script:ConsoleLockTimeoutGuid, $seconds
+        )
+        if ($dc.ExitCode -ne 0)
+        {
+            throw "powercfg failed to set the battery console lock display timeout (exit $($dc.ExitCode)).`n$($dc.Output)"
+        }
+        $timeoutChanged = $true
+    }
+
+    if ($timeoutChanged)
+    {
+        $active = Invoke-PowerCfg -ArgumentList @('/setactive', 'SCHEME_CURRENT')
+        if ($active.ExitCode -ne 0)
+        {
+            throw "powercfg failed to activate the current power scheme (exit $($active.ExitCode)).`n$($active.Output)"
+        }
+    }
 
     if (-not (Test-LockScreenPlayback))
     {
