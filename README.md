@@ -15,7 +15,7 @@ edit .\winget-packages.yml
 winget configure -f .configurations\configuration.dsc.yaml
 ```
 
-> **Note:** Run step 3 from an [elevated PowerShell window](#elevated-session). `winget configure` also requires a Microsoft-connected account. If you are using a local Windows account, see [Legacy Mode](#legacy-mode) below.
+> **Note:** Run step 3 from a normal PowerShell window. When `Chrome.LockScreenPlayback` runs, approve the [administrator prompt](#elevated-session). `winget configure` also requires a Microsoft-connected account. If you are using a local Windows account, see [Legacy Mode](#legacy-mode) below.
 
 ## Apply the Released Configuration Without Cloning
 
@@ -49,7 +49,7 @@ Invoke-WebRequest `
     -OutFile (Join-Path $env:TEMP "configuration.dsc.yaml")
 ```
 
-> **Prerequisites still apply:** open an [elevated PowerShell window](#elevated-session) first. `winget configure` also requires a Microsoft-connected account. See [Prerequisites](#prerequisites).
+> **Prerequisites still apply:** run it from a normal PowerShell window and approve the [administrator prompt](#elevated-session) for the lock-screen resource. `winget configure` also requires a Microsoft-connected account. See [Prerequisites](#prerequisites).
 
 ## How It Works
 
@@ -90,13 +90,11 @@ Pocket Casts on Windows is the Chrome app. Chrome suspends a window it decides i
 
 The policy applies to every user and every Chrome window, and this script does not remove it later.
 
-`Install-Packages.ps1` applies the same settings. Start that script from an [elevated PowerShell window](#elevated-session). If it is not elevated, it warns and still installs packages.
+Run `winget configure` from a normal PowerShell window. When it reaches `Chrome.LockScreenPlayback`, Windows shows a User Account Control prompt. Approve it. That prompt writes the Chrome policy and the 30-second timeout. Dismissing it fails only that resource:
 
-`winget configure` marks `Chrome.LockScreenPlayback` with `securityContext: elevated`. From a normal PowerShell window it asks for administrator approval before that resource runs. Approve the User Account Control prompt. A window that is already elevated applies the resource without another prompt. Dismissing the prompt leaves that resource failed, with this error:
+`Lock-screen playback settings require an elevated PowerShell session. Approve the administrator prompt.`
 
-`Lock-screen playback settings require an elevated PowerShell session.`
-
-The resource is after the package resources, so that failure does not undo packages that already applied. Run either command again and approve the prompt:
+The resource is after the package resources, so that failure does not undo packages that already applied. Do not start this command from an Administrator window. An elevated `winget configure` process fails `WinGetPackage` with "Failed to create instance." `Install-Packages.ps1` shows the same prompt. If that script is not able to elevate, it warns and still installs packages.
 
 ```powershell
 winget configure -f .configurations\configuration.dsc.yaml
@@ -108,7 +106,7 @@ Or, for a local account:
 .\Install-Packages.ps1
 ```
 
-For `Install-Packages.ps1`, the window title must say Administrator. Otherwise the Chrome policy and the 30-second lock-screen timeout are not written, and package installation still continues. For `winget configure`, approve the administrator prompt when it appears.
+Approve the prompt when it appears. The PowerShell window itself stays a normal window. Do not add `securityContext: elevated` to this resource. WinGet then fails every unit with "The file name is too long."
 
 Quit Chrome completely and open it again before the next listen. Chrome will show "Managed by your organization" because of this policy. Closing the lid, pressing the power button, or choosing Sleep still stops audio.
 
@@ -173,27 +171,19 @@ This means you never need to hand‑edit the DSC file — just add or remove lin
 - **PowerShell:** 7.6 or later
 - **winget:** Windows Package Manager (`winget --version` to verify)
 - **Git:** Required for automatic removal tracking (`git --version` to verify)
-- **Privileges:** Administrator. See [Elevated session](#elevated-session).
+- **Privileges:** Approve the administrator prompt for the lock-screen resource. See [Elevated session](#elevated-session).
 - **Account:** Microsoft-connected account (for `winget configure` only)
 
 ### Elevated session
 
-Lock-screen playback writes `HKLM\SOFTWARE\Policies\Google\Chrome` and resets the active power scheme's console lock display timeout to 30 seconds.
-
-`winget configure` prompts for administrator approval when it reaches `Chrome.LockScreenPlayback`. Approve that prompt. To apply the whole file without a second prompt, open PowerShell as Administrator first:
-
-1. Open the Start menu and type `PowerShell`.
-2. Right-click **PowerShell 7** (or **Windows PowerShell**) and choose **Run as administrator**.
-3. Approve the User Account Control prompt.
-4. Confirm the window title says **Administrator**.
-5. Change to the clone, then apply:
+Lock-screen playback writes `HKLM\SOFTWARE\Policies\Google\Chrome` and resets the active power scheme's console lock display timeout to 30 seconds. Run `winget configure` from a normal PowerShell window:
 
 ```powershell
 Set-Location .\winget-configure
 winget configure -f .configurations\configuration.dsc.yaml
 ```
 
-Use the path of your clone in `Set-Location`. `Install-Packages.ps1` has to be started from this Administrator window. It does not show its own elevation prompt. Dismissing the `winget configure` prompt skips the Chrome policy and the 30-second lock-screen timeout. Package installation still continues.
+Use the path of your clone in `Set-Location`. When `Chrome.LockScreenPlayback` runs, approve the User Account Control prompt. That prompt is the elevation. Leave the original window as a normal window. Starting the whole command with **Run as administrator** makes package configuration fail with "Failed to create instance." Dismissing the lock-screen prompt skips the Chrome policy and the 30-second timeout. Package installation still continues.
 
 ### Execution Policy
 
@@ -210,13 +200,15 @@ Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 | **`winget` not found** | The `helpers/` modules can bootstrap winget for you. Import `Ensure-Winget.psm1` and run its exported function. |
 | **Microsoft Store / account errors with `winget configure`** | This command requires a Microsoft‑connected account. Switch to [Legacy Mode](#legacy-mode) if you are on a local account. |
 | **Package ID not found** | IDs change over time. Search the [winget-pkgs repository](https://github.com/microsoft/winget-pkgs) for the current ID. |
-| **Permission denied**, or **Lock-screen playback settings require an elevated PowerShell session** | Approve the administrator prompt from `winget configure`, or retry from an [Administrator window](#elevated-session). |
+| **Lock-screen playback settings require an elevated PowerShell session** | Run `winget configure` again from a normal window and approve the [administrator prompt](#elevated-session). |
+| **Failed to create instance** on every `WinGetPackage` | The command was started as Administrator. Run it again from a normal PowerShell window and approve the lock-screen prompt. |
+| **The file name is too long**, or **-2147024785** / **0x8007006F**, on every `WinGetPackage` | The configuration was marked `securityContext: elevated`. Use the current `.configurations\configuration.dsc.yaml` from a normal PowerShell window. |
 | **DSC file looks stale** | Re‑run `.\New-WingetConfiguration.ps1` after editing `winget-packages.yml`. The DSC file is a generated artifact. |
 | **`Microsoft.WSL` upgrade fails with `0x80073d28`** | Do not retry `winget upgrade Microsoft.WSL`. Run `.\Update-Packages.ps1` (or `wsl --update --web-download`). The configuration pins WSL so `winget upgrade --all` skips it. |
 
 ## Legacy Mode
 
-`Install-Packages.ps1` is an imperative PowerShell installer kept as a fallback for **local (non‑Microsoft) Windows accounts** that cannot use `winget configure`. Run it from an [elevated PowerShell window](#elevated-session). It applies the lock-screen playback settings as well as the package list.
+`Install-Packages.ps1` is an imperative PowerShell installer kept as a fallback for **local (non‑Microsoft) Windows accounts** that cannot use `winget configure`. Run it from a normal PowerShell window. It shows the same [administrator prompt](#elevated-session) for the lock-screen settings. If that prompt is dismissed, package installation continues.
 
 ```powershell
 # Install everything defined in winget-packages.yml
