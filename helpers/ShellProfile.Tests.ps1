@@ -170,4 +170,22 @@ $windowsText = [System.IO.File]::ReadAllText($textPath)
 Remove-Item -LiteralPath $textPath -Force
 Assert-Equal $windowsText $expectedProfile 'Windows PowerShell 5.1 relaunches the helper'
 
+Set-StrictMode -Version Latest
+$helperText = [System.IO.File]::ReadAllText($helper)
+$previousDscCommand = [Environment]::GetEnvironmentVariable('SHELL_PROFILE_COMMAND')
+[Environment]::SetEnvironmentVariable('SHELL_PROFILE_COMMAND', $null)
+try
+{
+    $dscGet = [scriptblock]::Create($helperText + "`nreturn (Get-ShellProfileReport)`n")
+    $dscReport = & $dscGet
+    $dscTest = [scriptblock]::Create($helperText + "`nreturn (Test-ShellProfile)`n")
+    $dscResult = & $dscTest
+}
+finally
+{
+    [Environment]::SetEnvironmentVariable('SHELL_PROFILE_COMMAND', $previousDscCommand)
+}
+Assert-True ($null -ne $dscReport -and $dscReport.Result -match '^profile=') 'strict scriptblock get returns facts'
+Assert-True ($dscResult -is [bool]) 'strict scriptblock test returns a boolean'
+
 Write-Output 'ShellProfile tests passed'

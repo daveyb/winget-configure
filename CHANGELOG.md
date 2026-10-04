@@ -14,6 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The Windows Terminal profile list puts PowerShell first, and `defaultProfile` opens that profile. Windows PowerShell stays later in the list.
 - `Install-Packages.ps1` applies the same steps after the package loop. If that step fails, the script warns and package installation continues.
 
+### Fixed
+- `Shell.Profile` reads its script path only when that property exists. `winget configure` runs the test script as a script block under StrictMode, and `MyCommand.Path` threw `PropertyNotFoundException` before the unit could test the profile.
+
 ## [1.1.21] - 2026-10-03
 
 ### Fixed

@@ -14,9 +14,28 @@
 # dropdown order. PowerShell has to be first in both.
 
 $ErrorActionPreference = 'Stop'
-$script:ShellProfileFile = $MyInvocation.MyCommand.Path
 
-if (($PSVersionTable.PSVersion.Major -lt 7) -and ($MyInvocation.InvocationName -ne '.'))
+# winget configure runs this text as a script block under StrictMode.
+# ScriptInfo has no Path property, so that member is read only when it exists.
+# An empty path stays in this process. PowerShell 7 is that host.
+$script:ShellProfileFile = $null
+$commandInfo = $MyInvocation.MyCommand
+if ($null -ne $commandInfo)
+{
+    $pathProperty = $commandInfo.PSObject.Properties['Path']
+    if ($null -ne $pathProperty -and -not [string]::IsNullOrWhiteSpace([string]$pathProperty.Value))
+    {
+        $script:ShellProfileFile = [string]$pathProperty.Value
+    }
+}
+if ([string]::IsNullOrWhiteSpace($script:ShellProfileFile))
+{
+    $script:ShellProfileFile = $PSCommandPath
+}
+
+if (($PSVersionTable.PSVersion.Major -lt 7) -and
+    ($MyInvocation.InvocationName -ne '.') -and
+    -not [string]::IsNullOrWhiteSpace($script:ShellProfileFile))
 {
     $pwshCmd = Get-Command -Name pwsh -ErrorAction Stop
     $output = & $pwshCmd.Source -NoProfile -NonInteractive -File $script:ShellProfileFile
