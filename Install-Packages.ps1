@@ -324,6 +324,7 @@ Write-Host ''
 $helperPath = Join-Path $PSScriptRoot 'helpers\Ensure-Winget.psm1'
 $wslHelperPath = Join-Path $PSScriptRoot 'helpers\Update-Wsl.psm1'
 $lockHelperPath = Join-Path $PSScriptRoot 'helpers\LockScreenPlayback.psm1'
+$shellHelperPath = Join-Path $PSScriptRoot 'helpers\ShellProfile.psm1'
 
 if (-not (Test-Path $helperPath))
 {
@@ -340,6 +341,10 @@ if (Test-Path -LiteralPath $wslHelperPath)
 if (Test-Path -LiteralPath $lockHelperPath)
 {
     Import-Module $lockHelperPath -Force
+}
+if (Test-Path -LiteralPath $shellHelperPath)
+{
+    Import-Module $shellHelperPath -Force
 }
 
 # Step 1: Build the package list ──────────────────────────────────────────────
@@ -498,7 +503,39 @@ foreach ($package in $PackageList)
     }
 }
 
-# Step 4: Summary ──────────────────────────────────────────────────────────────
+# Step 4: PowerShell profile, Terminal-Icons, Departure Mono, Windows Terminal.
+# Same desired state as the Shell.Profile DSC resource. A failure here must
+# not abort the package run.
+if (-not $Thermonuclear)
+{
+    if (-not (Get-Command -Name Set-ShellProfile -ErrorAction SilentlyContinue))
+    {
+        Write-Warning "Shell profile module not found at: $shellHelperPath. Package installation will continue."
+    }
+    else
+    {
+        try
+        {
+            Write-ProgressInfo 'Configuring the PowerShell profile and Windows Terminal...' -Quiet:$Quiet
+            Set-ShellProfile
+            if (Test-ShellProfile)
+            {
+                Write-ProgressSuccess 'PowerShell profile and Windows Terminal are configured' -Quiet:$Quiet
+            }
+            else
+            {
+                Write-Warning 'Shell profile was not applied. Package installation will continue.'
+            }
+        }
+        catch
+        {
+            Write-Warning "Shell profile was not applied. Package installation will continue. $($_.Exception.Message)"
+        }
+    }
+    Write-Host ''
+}
+
+# Step 5: Summary ──────────────────────────────────────────────────────────────
 Write-Host ''
 Write-Host "=== $(if ($Thermonuclear) { 'Uninstallation' } else { 'Installation' }) Summary ===" -ForegroundColor Cyan
 Write-Host "Total packages processed : $($PackageList.Count)" -ForegroundColor White

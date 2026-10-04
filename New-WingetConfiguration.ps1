@@ -539,7 +539,18 @@ function Get-LockScreenPlaybackLibrary
     return (Get-Content -LiteralPath $path -Raw).TrimEnd()
 }
 
-function Get-LockScreenPlaybackScript
+function Get-ShellProfileLibrary
+{
+    $path = Join-Path $PSScriptRoot 'helpers\ShellProfile.ps1'
+    if (-not (Test-Path -LiteralPath $path))
+    {
+        throw "Shell profile script not found: $path"
+    }
+
+    return (Get-Content -LiteralPath $path -Raw).TrimEnd()
+}
+
+function Get-EmbeddedScript
 {
     [CmdletBinding()]
     param(
@@ -672,9 +683,20 @@ function Build-DscYaml
     Add-WslScriptResource -Builder $sb `
         -ResourceId 'Chrome.LockScreenPlayback' `
         -Description 'Disable Chrome window occlusion and keep the lock-screen display timeout at 30 seconds' `
-        -GetScript (Get-LockScreenPlaybackScript -Library $lockLibrary -Invocation 'return (Get-LockScreenPlaybackReport)') `
-        -TestScript (Get-LockScreenPlaybackScript -Library $lockLibrary -Invocation 'return (Test-LockScreenPlayback)') `
-        -SetScript (Get-LockScreenPlaybackScript -Library $lockLibrary -Invocation 'Set-LockScreenPlayback')
+        -GetScript (Get-EmbeddedScript -Library $lockLibrary -Invocation 'return (Get-LockScreenPlaybackReport)') `
+        -TestScript (Get-EmbeddedScript -Library $lockLibrary -Invocation 'return (Test-LockScreenPlayback)') `
+        -SetScript (Get-EmbeddedScript -Library $lockLibrary -Invocation 'Set-LockScreenPlayback')
+
+    # After package resources. A shell-profile failure must not abort them.
+    $shellLibrary = Get-ShellProfileLibrary
+    $null = $sb.AppendLine('')
+    $null = $sb.AppendLine('    # -- Shell profile ----------------------------------------------------------------')
+    Add-WslScriptResource -Builder $sb `
+        -ResourceId 'Shell.Profile' `
+        -Description 'Write the PowerShell 7 profile, install Terminal-Icons and Departure Mono, and put PowerShell first in Windows Terminal' `
+        -GetScript (Get-EmbeddedScript -Library $shellLibrary -Invocation 'return (Get-ShellProfileReport)') `
+        -TestScript (Get-EmbeddedScript -Library $shellLibrary -Invocation 'return (Test-ShellProfile)') `
+        -SetScript (Get-EmbeddedScript -Library $shellLibrary -Invocation 'Set-ShellProfile')
 
     return $sb.ToString()
 }
