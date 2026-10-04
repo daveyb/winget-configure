@@ -559,8 +559,7 @@ function Add-WslScriptResource
         [Parameter(Mandatory)][string]$Description,
         [Parameter(Mandatory)][string]$GetScript,
         [Parameter(Mandatory)][string]$TestScript,
-        [Parameter(Mandatory)][string]$SetScript,
-        [string]$SecurityContext
+        [Parameter(Mandatory)][string]$SetScript
     )
 
     $null = $Builder.AppendLine('')
@@ -569,10 +568,6 @@ function Add-WslScriptResource
     $null = $Builder.AppendLine('      directives:')
     $null = $Builder.AppendLine("        description: $Description")
     $null = $Builder.AppendLine('        allowPrerelease: true')
-    if (-not [string]::IsNullOrWhiteSpace($SecurityContext))
-    {
-        $null = $Builder.AppendLine("        securityContext: $SecurityContext")
-    }
     $null = $Builder.AppendLine('      settings:')
     Add-YamlBlockScalar -Builder $Builder -Key 'GetScript' -Value $GetScript
     Add-YamlBlockScalar -Builder $Builder -Key 'TestScript' -Value $TestScript
@@ -677,7 +672,6 @@ function Build-DscYaml
     Add-WslScriptResource -Builder $sb `
         -ResourceId 'Chrome.LockScreenPlayback' `
         -Description 'Disable Chrome window occlusion and keep the lock-screen display timeout at 30 seconds' `
-        -SecurityContext 'elevated' `
         -GetScript (Get-LockScreenPlaybackScript -Library $lockLibrary -Invocation 'return (Get-LockScreenPlaybackReport)') `
         -TestScript (Get-LockScreenPlaybackScript -Library $lockLibrary -Invocation 'return (Test-LockScreenPlayback)') `
         -SetScript (Get-LockScreenPlaybackScript -Library $lockLibrary -Invocation 'Set-LockScreenPlayback')

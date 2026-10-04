@@ -16,11 +16,11 @@
 # AC and on battery. powercfg /qh is queried for that setting only, and the
 # current AC and DC indexes are the last two hex values in its block.
 #
-# The generated resource sets securityContext to elevated, so winget
-# configure runs Set in an elevated process and prompts when the current
-# window is not elevated. Set still throws when that process is not
-# elevated or the write does not stick. Install-Packages.ps1 catches that
-# and continues with packages.
+# Set throws when it is not elevated or the write does not stick.
+# Install-Packages.ps1 catches that and continues with packages.
+# Run winget configure from an Administrator PowerShell window. A
+# per-resource securityContext of elevated makes this configuration fail
+# every unit with "The file name is too long."
 #
 # Chrome must be restarted before an already-open browser picks up the
 # policy. Closing the lid, pressing the power button, or choosing Sleep

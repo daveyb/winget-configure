@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.21] - 2026-10-03
+
+### Fixed
+- `winget configure` no longer marks `Chrome.LockScreenPlayback` with `securityContext: elevated`. That directive made every unit fail with `0x8007006F` (`-2147024785`), "The file name is too long." Run `winget configure` from an Administrator PowerShell window so the Chrome policy and the 30-second timeout are written.
+
 ## [1.1.20] - 2026-10-03
 
 ### Fixed
