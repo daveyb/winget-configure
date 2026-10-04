@@ -76,6 +76,7 @@ Assert-Equal $parsed.copyOnSelect $false 'unrelated setting survives'
 Assert-Equal $parsed.profiles.defaults.font.face 'DepartureMono Nerd Font' 'default face'
 Assert-True ($null -eq $parsed.profiles.defaults.PSObject.Properties['fontFace']) 'legacy default fontFace removed'
 Assert-Equal $parsed.profiles.list[0].name 'PowerShell' 'powershell is first'
+Assert-Equal $parsed.profiles.list.Count 3 'fixture list count stays 3'
 Assert-Equal $parsed.profiles.list[0].guid '{574e775e-4f2a-5b96-ac1e-a2962a402336}' 'powershell guid'
 Assert-Equal $parsed.profiles.list[0].hidden $false 'powershell is visible'
 Assert-Equal $parsed.defaultProfile $parsed.profiles.list[0].guid 'defaultProfile opens powershell'
@@ -102,6 +103,7 @@ $inserted = Convert-TerminalSettingsJson -Json @'
 '@
 $insertedParsed = $inserted | ConvertFrom-Json
 Assert-Equal $insertedParsed.profiles.list[0].name 'PowerShell' 'missing powershell is inserted first'
+Assert-Equal $insertedParsed.profiles.list.Count 2 'insert adds one profile and does not duplicate'
 Assert-Equal $insertedParsed.profiles.list[0].source 'Windows.Terminal.PowershellCore' 'inserted source'
 Assert-Equal $insertedParsed.profiles.list[0].guid '{574e775e-4f2a-5b96-ac1e-a2962a402336}' 'inserted guid'
 Assert-Equal $insertedParsed.profiles.list[1].name 'Windows PowerShell' 'existing windows powershell remains'
@@ -142,8 +144,72 @@ $commented = @'
   }
 }
 '@
-$commentedParsed = (Convert-TerminalSettingsJson -Json $commented) | ConvertFrom-Json
+$commentedUpdated = Convert-TerminalSettingsJson -Json $commented
+Assert-True ($commentedUpdated -match 'keep the shell order') 'jsonc comment is preserved'
+Assert-Equal (Convert-TerminalSettingsJson -Json $commentedUpdated) $commentedUpdated 'commented update is byte-identical'
+$commentedParsed = ($commentedUpdated -replace '(?m)^\s*//.*$', '') | ConvertFrom-Json
 Assert-Equal $commentedParsed.profiles.list[0].name 'PowerShell' 'jsonc comment and trailing comma parse'
+Assert-Equal $commentedParsed.profiles.list.Count 2 'jsonc fixture does not insert a second profile'
+
+$noted = @'
+{
+  "profiles": {
+    "defaults": {},
+    "list": [
+      { "name": "Windows PowerShell", "guid": "{61c54bbd-c2c6-5271-96e7-009a87ff44bf}", "commandline": "%SystemRoot%\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" },
+      {
+        // user note stays with this profile
+        "name": "PowerShell",
+        "guid": "{574e775e-4f2a-5b96-ac1e-a2962a402336}",
+        "source": "Windows.Terminal.PowershellCore"
+      }
+    ]
+  }
+}
+'@
+$notedUpdated = Convert-TerminalSettingsJson -Json $noted
+Assert-True ($notedUpdated -match 'user note stays with this profile') 'profile comment moves with the profile'
+$notedParsed = ($notedUpdated -replace '(?m)^\s*//.*$', '') | ConvertFrom-Json
+Assert-Equal $notedParsed.profiles.list[0].name 'PowerShell' 'noted powershell is first'
+Assert-Equal $notedParsed.profiles.list.Count 2 'noted list count stays 2'
+
+$jsonName = [System.Text.Json.Nodes.JsonNode]::Parse('{"name":"PowerShell","hidden":false}')
+Assert-Equal (Get-JsonObjectString -Object $jsonName -Name 'name') 'PowerShell' 'GetValue string is not quoted'
+Assert-Equal (Get-JsonObjectString -Object $jsonName -Name 'missing') '' 'missing json field is empty'
+
+Set-StrictMode -Version Latest
+$helperText = [System.IO.File]::ReadAllText($helper)
+$blockProbe = Join-Path ([System.IO.Path]::GetTempPath()) ('shell-profile-block-' + [guid]::NewGuid().ToString('n') + '.txt')
+$previousBlockCommand = [Environment]::GetEnvironmentVariable('SHELL_PROFILE_COMMAND')
+$previousProbe = [Environment]::GetEnvironmentVariable('SHELL_PROFILE_SET_PROBE')
+$previousProbeOut = [Environment]::GetEnvironmentVariable('SHELL_PROFILE_SET_PROBE_OUT')
+try
+{
+    [Environment]::SetEnvironmentVariable('SHELL_PROFILE_COMMAND', $null)
+    $block = [scriptblock]::Create($helperText + "`n" + @'
+$relaunch = Save-ShellProfileRelaunchFile
+if (-not (Test-Path -LiteralPath $relaunch)) { throw "script block did not write a library file" }
+$library = [System.IO.File]::ReadAllText($relaunch)
+if ($library -notmatch "function Invoke-ShellProfileOnPwsh") { throw "temp library is not the helper" }
+$code = Invoke-ShellProfileOnPwsh -Command "Test"
+if ($code -ne 0 -and $code -ne 1) { throw "script block Test relaunch exited $code" }
+[Environment]::SetEnvironmentVariable("SHELL_PROFILE_SET_PROBE", "1")
+[Environment]::SetEnvironmentVariable("SHELL_PROFILE_SET_PROBE_OUT", $env:SHELL_PROFILE_BLOCK_PROBE)
+Invoke-ShellProfileOnPwsh -Command "Set" | Out-Null
+if (-not (Test-Path -LiteralPath $env:SHELL_PROFILE_BLOCK_PROBE)) { throw "script block Set did not relaunch" }
+'@)
+    [Environment]::SetEnvironmentVariable('SHELL_PROFILE_BLOCK_PROBE', $blockProbe)
+    & $block
+    Assert-True (Test-Path -LiteralPath $blockProbe) 'script block Set relaunch wrote the marker'
+}
+finally
+{
+    [Environment]::SetEnvironmentVariable('SHELL_PROFILE_COMMAND', $previousBlockCommand)
+    [Environment]::SetEnvironmentVariable('SHELL_PROFILE_SET_PROBE', $previousProbe)
+    [Environment]::SetEnvironmentVariable('SHELL_PROFILE_SET_PROBE_OUT', $previousProbeOut)
+    [Environment]::SetEnvironmentVariable('SHELL_PROFILE_BLOCK_PROBE', $null)
+    Remove-Item -LiteralPath $blockProbe -Force -ErrorAction SilentlyContinue
+}
 
 $windowsPowerShell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
 Assert-True (Test-Path -LiteralPath $windowsPowerShell) 'Windows PowerShell is present'
@@ -169,6 +235,83 @@ Assert-True (Test-Path -LiteralPath $textPath) 'Windows PowerShell relaunch wrot
 $windowsText = [System.IO.File]::ReadAllText($textPath)
 Remove-Item -LiteralPath $textPath -Force
 Assert-Equal $windowsText $expectedProfile 'Windows PowerShell 5.1 relaunches the helper'
+
+$runnerPath = Join-Path ([System.IO.Path]::GetTempPath()) ('shell-profile-51-' + [guid]::NewGuid().ToString('n') + '.ps1')
+$payloadPath = Join-Path ([System.IO.Path]::GetTempPath()) ('shell-profile-51-payload-' + [guid]::NewGuid().ToString('n') + '.ps1')
+$setProbePath = Join-Path ([System.IO.Path]::GetTempPath()) ('shell-profile-51-set-' + [guid]::NewGuid().ToString('n') + '.txt')
+$runnerText = @'
+$ErrorActionPreference = "Stop"
+Set-StrictMode -Version Latest
+[Environment]::SetEnvironmentVariable("SHELL_PROFILE_COMMAND", $null)
+$payloadPath = [Environment]::GetEnvironmentVariable("SHELL_PROFILE_PAYLOAD")
+$mode = [Environment]::GetEnvironmentVariable("SHELL_PROFILE_MODE")
+$text = [System.IO.File]::ReadAllText($payloadPath)
+$block = [scriptblock]::Create($text)
+if ($mode -eq "Get") {
+    $result = & $block
+    if ($null -eq $result -or [string]$result.Result -notmatch "^profile=") {
+        throw "5.1 script block Get did not return facts."
+    }
+    exit 0
+}
+if ($mode -eq "Test") {
+    $result = & $block
+    if ($result -isnot [bool]) {
+        throw "5.1 script block Test did not return a boolean."
+    }
+    exit 0
+}
+if ($mode -eq "Set") {
+    & $block
+    $probe = [Environment]::GetEnvironmentVariable("SHELL_PROFILE_SET_PROBE_OUT")
+    if ([string]::IsNullOrWhiteSpace($probe) -or -not (Test-Path -LiteralPath $probe)) {
+        throw "5.1 script block Set did not relaunch pwsh."
+    }
+    exit 0
+}
+throw "Unknown 5.1 mode $mode"
+'@
+$encoding = New-Object System.Text.UTF8Encoding $false
+[System.IO.File]::WriteAllText($runnerPath, $runnerText, $encoding)
+$previous51Command = [Environment]::GetEnvironmentVariable('SHELL_PROFILE_COMMAND')
+$previous51Probe = [Environment]::GetEnvironmentVariable('SHELL_PROFILE_SET_PROBE')
+$previous51ProbeOut = [Environment]::GetEnvironmentVariable('SHELL_PROFILE_SET_PROBE_OUT')
+$previous51Payload = [Environment]::GetEnvironmentVariable('SHELL_PROFILE_PAYLOAD')
+$previous51Mode = [Environment]::GetEnvironmentVariable('SHELL_PROFILE_MODE')
+try
+{
+    [Environment]::SetEnvironmentVariable('SHELL_PROFILE_COMMAND', $null)
+    [Environment]::SetEnvironmentVariable('SHELL_PROFILE_SET_PROBE', $null)
+    [Environment]::SetEnvironmentVariable('SHELL_PROFILE_SET_PROBE_OUT', $null)
+    foreach ($mode in @('Get', 'Test', 'Set'))
+    {
+        $invocation = if ($mode -eq 'Get') { 'return (Get-ShellProfileReport)' } elseif ($mode -eq 'Test') { 'return (Test-ShellProfile)' } else { 'Set-ShellProfile' }
+        [System.IO.File]::WriteAllText($payloadPath, ($helperText.TrimEnd() + "`r`n" + $invocation + "`r`n"), $encoding)
+        [Environment]::SetEnvironmentVariable('SHELL_PROFILE_PAYLOAD', $payloadPath)
+        [Environment]::SetEnvironmentVariable('SHELL_PROFILE_MODE', $mode)
+        if ($mode -eq 'Set')
+        {
+            [Environment]::SetEnvironmentVariable('SHELL_PROFILE_SET_PROBE', '1')
+            [Environment]::SetEnvironmentVariable('SHELL_PROFILE_SET_PROBE_OUT', $setProbePath)
+        }
+        $output = & $windowsPowerShell -NoProfile -ExecutionPolicy Bypass -File $runnerPath 2>&1
+        $code = $LASTEXITCODE
+        if ($code -ne 0)
+        {
+            throw ("Windows PowerShell 5.1 script-block {0} exited {1}: {2}" -f $mode, $code, ($output | Out-String))
+        }
+    }
+    Assert-True (Test-Path -LiteralPath $setProbePath) '5.1 script-block Set relaunched pwsh'
+}
+finally
+{
+    [Environment]::SetEnvironmentVariable('SHELL_PROFILE_COMMAND', $previous51Command)
+    [Environment]::SetEnvironmentVariable('SHELL_PROFILE_SET_PROBE', $previous51Probe)
+    [Environment]::SetEnvironmentVariable('SHELL_PROFILE_SET_PROBE_OUT', $previous51ProbeOut)
+    [Environment]::SetEnvironmentVariable('SHELL_PROFILE_PAYLOAD', $previous51Payload)
+    [Environment]::SetEnvironmentVariable('SHELL_PROFILE_MODE', $previous51Mode)
+    Remove-Item -LiteralPath $runnerPath, $payloadPath, $setProbePath -Force -ErrorAction SilentlyContinue
+}
 
 Set-StrictMode -Version Latest
 $helperText = [System.IO.File]::ReadAllText($helper)

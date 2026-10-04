@@ -16,6 +16,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - `Shell.Profile` reads its script path only when that property exists. `winget configure` runs the test script as a script block under StrictMode, and `MyCommand.Path` threw `PropertyNotFoundException` before the unit could test the profile.
+- Windows PowerShell 5.1 still has no path for that script block. Test, Set, and Get write the script to a temp file and relaunch it with pwsh. They no longer throw because `MyCommand.Path` and `PSCommandPath` are empty.
+- Windows Terminal `settings.json` comments are kept. The edit sets the default font, removes per-profile font keys, puts PowerShell first, and sets `defaultProfile`. The file is rewritten, so spacing can change. It does not rewrite the file through `System.Text.Json` and drop every comment.
+- Profile name, command line, source, and guid are read with `GetValue<string>()`. `JsonNode.ToString()` returns JSON text, so a quoted name was not a match and a second PowerShell profile could be inserted.
 
 ## [1.1.21] - 2026-10-03
 

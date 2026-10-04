@@ -127,7 +127,9 @@ Import-Module -Name Terminal-Icons
 
 The font files come from the Nerd Fonts 3.5.1 Departure Mono zip. They are registered in the current user's Fonts folder, not in `C:\Windows\Fonts`. The Windows Terminal face is `DepartureMono Nerd Font`. `profiles.defaults.font.face` is set to that name. Font settings on individual profiles are removed so the default face applies to every profile.
 
-PowerShell is the profile named `PowerShell` from `Windows.Terminal.PowershellCore`. It is moved to the start of `profiles.list`. `defaultProfile` is set to that profile's guid. Windows PowerShell stays in the list after it.
+PowerShell is the profile named `PowerShell` from `Windows.Terminal.PowershellCore`. It is moved to the start of `profiles.list`. `defaultProfile` is set to that profile's guid. Windows PowerShell stays in the list after it. Comments already in `settings.json` are kept. The file is rewritten, so spacing can change. The intended edits are the default font, per-profile font keys, list order, and `defaultProfile`.
+
+`winget configure` can run that script as a script block under Windows PowerShell 5.1. The block has no path, so the resource writes it to a temp file and relaunches it with pwsh before Test, Set, or Get.
 
 `Install-Packages.ps1` runs these steps after the package loop. If the step fails, the script warns and package installation still finishes. Open a new Windows Terminal tab to see the prompt and the font.
 
