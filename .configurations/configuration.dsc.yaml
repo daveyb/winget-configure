@@ -588,7 +588,8 @@ properties:
           #
           # The policy is written to HKLM\SOFTWARE\Policies\Google\Chrome in the
           # 64-bit registry view. CreateSubKey creates the Google and Chrome keys
-          # when they are missing. winget configure runs elevated. Chrome applies
+          # when they are missing. The elevated lock-screen process writes that
+          # policy. winget configure itself stays a normal window. Chrome applies
           # this machine policy to every user. This script does not remove the value
           # later.
           #
@@ -929,6 +930,80 @@ properties:
               return $builder.ToString()
           }
           
+          function Get-LockScreenPlaybackHostPath
+          {
+              [CmdletBinding()]
+              param()
+          
+              # Launch the host that defined these functions. Windows PowerShell 5.1
+              # rejects PowerShell 7 syntax that only the elevated copy would run.
+              $current = $null
+              try
+              {
+                  $current = (Get-Process -Id $PID -ErrorAction Stop).Path
+              }
+              catch
+              {
+                  $current = $null
+              }
+          
+              if (-not [string]::IsNullOrWhiteSpace($current))
+              {
+                  return $current
+              }
+          
+              $name = 'powershell.exe'
+              if ($PSVersionTable.PSEdition -eq 'Core')
+              {
+                  $name = 'pwsh.exe'
+              }
+          
+              return (Join-Path $PSHOME $name)
+          }
+          
+          function ConvertTo-LockScreenPlaybackArgument
+          {
+              [CmdletBinding()]
+              param(
+                  [Parameter(Mandatory)]
+                  [string]$Value
+              )
+          
+              # UseShellExecute takes one command line. Quote every path, including
+              # those with no spaces, so TEMP values are not split.
+              return '"' + $Value.Replace('"', '""') + '"'
+          }
+          
+          function Read-LockScreenPlaybackResult
+          {
+              [CmdletBinding()]
+              param(
+                  [Parameter(Mandatory)]
+                  [string]$Path
+              )
+          
+              try
+              {
+                  if (-not (Test-Path -LiteralPath $Path))
+                  {
+                      return ''
+                  }
+          
+                  $text = Get-Content -LiteralPath $Path -Raw -ErrorAction SilentlyContinue
+              }
+              catch
+              {
+                  return ''
+              }
+          
+              if ($null -eq $text)
+              {
+                  return ''
+              }
+          
+              return ([string]$text).Trim()
+          }
+          
           function Start-LockScreenPlaybackElevated
           {
               [CmdletBinding()]
@@ -938,41 +1013,108 @@ properties:
               New-Item -ItemType Directory -Path $directory | Out-Null
               $scriptPath = Join-Path $directory 'apply.ps1'
               $resultPath = Join-Path $directory 'result.txt'
-              $powershell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+              $hostPath = Get-LockScreenPlaybackHostPath
               Set-Content -LiteralPath $scriptPath -Value (Get-LockScreenPlaybackWorkerScript) -Encoding ASCII
           
+              # -Verb RunAs forces UseShellExecute. An argument array is split on
+              # spaces, and $env:TEMP often contains spaces. Pass one quoted string.
+              $arguments = @(
+                  '-NoProfile'
+                  '-ExecutionPolicy'
+                  'Bypass'
+                  '-File'
+                  (ConvertTo-LockScreenPlaybackArgument $scriptPath)
+                  '-ResultPath'
+                  (ConvertTo-LockScreenPlaybackArgument $resultPath)
+              ) -join ' '
+          
+              $handleMessage = $null
               try
               {
-                  $process = Start-Process -FilePath $powershell -ArgumentList @(
-                      '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $scriptPath, '-ResultPath', $resultPath
-                  ) -Verb RunAs -PassThru
-                  if ($null -eq $process)
+                  $process = $null
+                  try
                   {
-                      throw 'Lock-screen playback did not start the elevated PowerShell process.'
+                      $process = Start-Process -FilePath $hostPath -ArgumentList $arguments -Verb RunAs -PassThru
                   }
-                  $process.WaitForExit()
-                  $result = ''
-                  if (Test-Path -LiteralPath $resultPath)
+                  catch
                   {
-                      $result = (Get-Content -LiteralPath $resultPath -Raw).Trim()
+                      $handleMessage = $_.Exception.Message
                   }
-                  if ($process.ExitCode -ne 0 -or $result -ne 'OK')
+          
+                  if ($null -eq $process -and [string]::IsNullOrWhiteSpace($handleMessage))
                   {
-                      if ([string]::IsNullOrWhiteSpace($result))
+                      $handleMessage = 'Lock-screen playback did not start the elevated PowerShell process.'
+                  }
+          
+                  if ($null -ne $process)
+                  {
+                      # WaitForExit and ExitCode throw (access denied, or the handle was
+                      # not started by this object) even after the elevated script wrote
+                      # OK. The result file is the only success signal. Do not read
+                      # ExitCode, and do not fail a completed OK write.
+                      $deadline = [datetime]::UtcNow.AddMinutes(10)
+                      while ([datetime]::UtcNow -lt $deadline)
                       {
-                          $result = "elevated PowerShell exited $($process.ExitCode)"
+                          $pending = Read-LockScreenPlaybackResult -Path $resultPath
+                          if (-not [string]::IsNullOrWhiteSpace($pending))
+                          {
+                              break
+                          }
+          
+                          try
+                          {
+                              if ($process.WaitForExit(500))
+                              {
+                                  break
+                              }
+                          }
+                          catch
+                          {
+                              $handleMessage = $_.Exception.Message
+                              Start-Sleep -Milliseconds 250
+                          }
                       }
-                      throw "Lock-screen playback settings were not applied. $result"
                   }
-              }
-              catch
-              {
-                  $message = $_.Exception.Message
-                  if ($message -match 'canceled by the user')
+          
+                  $result = Read-LockScreenPlaybackResult -Path $resultPath
+                  if ($result -ne 'OK')
+                  {
+                      # The elevated script writes OK and then exits. A handle error can
+                      # surface before that write is visible. Retry before failing a
+                      # completed apply. finally must not delete the file first.
+                      foreach ($delay in @(200, 400, 800))
+                      {
+                          if (-not [string]::IsNullOrWhiteSpace($result))
+                          {
+                              break
+                          }
+          
+                          Start-Sleep -Milliseconds $delay
+                          $result = Read-LockScreenPlaybackResult -Path $resultPath
+                      }
+                  }
+          
+                  if ($result -eq 'OK')
+                  {
+                      return
+                  }
+          
+                  if ($handleMessage -and $handleMessage -match 'canceled by the user')
                   {
                       throw 'Lock-screen playback settings require an elevated PowerShell session. Approve the administrator prompt.'
                   }
-                  throw
+          
+                  if ([string]::IsNullOrWhiteSpace($result))
+                  {
+                      if (-not [string]::IsNullOrWhiteSpace($handleMessage))
+                      {
+                          throw "Lock-screen playback settings were not applied. $handleMessage"
+                      }
+          
+                      throw 'Lock-screen playback settings were not applied.'
+                  }
+          
+                  throw "Lock-screen playback settings were not applied. $result"
               }
               finally
               {
@@ -1063,7 +1205,8 @@ properties:
           #
           # The policy is written to HKLM\SOFTWARE\Policies\Google\Chrome in the
           # 64-bit registry view. CreateSubKey creates the Google and Chrome keys
-          # when they are missing. winget configure runs elevated. Chrome applies
+          # when they are missing. The elevated lock-screen process writes that
+          # policy. winget configure itself stays a normal window. Chrome applies
           # this machine policy to every user. This script does not remove the value
           # later.
           #
@@ -1404,6 +1547,80 @@ properties:
               return $builder.ToString()
           }
           
+          function Get-LockScreenPlaybackHostPath
+          {
+              [CmdletBinding()]
+              param()
+          
+              # Launch the host that defined these functions. Windows PowerShell 5.1
+              # rejects PowerShell 7 syntax that only the elevated copy would run.
+              $current = $null
+              try
+              {
+                  $current = (Get-Process -Id $PID -ErrorAction Stop).Path
+              }
+              catch
+              {
+                  $current = $null
+              }
+          
+              if (-not [string]::IsNullOrWhiteSpace($current))
+              {
+                  return $current
+              }
+          
+              $name = 'powershell.exe'
+              if ($PSVersionTable.PSEdition -eq 'Core')
+              {
+                  $name = 'pwsh.exe'
+              }
+          
+              return (Join-Path $PSHOME $name)
+          }
+          
+          function ConvertTo-LockScreenPlaybackArgument
+          {
+              [CmdletBinding()]
+              param(
+                  [Parameter(Mandatory)]
+                  [string]$Value
+              )
+          
+              # UseShellExecute takes one command line. Quote every path, including
+              # those with no spaces, so TEMP values are not split.
+              return '"' + $Value.Replace('"', '""') + '"'
+          }
+          
+          function Read-LockScreenPlaybackResult
+          {
+              [CmdletBinding()]
+              param(
+                  [Parameter(Mandatory)]
+                  [string]$Path
+              )
+          
+              try
+              {
+                  if (-not (Test-Path -LiteralPath $Path))
+                  {
+                      return ''
+                  }
+          
+                  $text = Get-Content -LiteralPath $Path -Raw -ErrorAction SilentlyContinue
+              }
+              catch
+              {
+                  return ''
+              }
+          
+              if ($null -eq $text)
+              {
+                  return ''
+              }
+          
+              return ([string]$text).Trim()
+          }
+          
           function Start-LockScreenPlaybackElevated
           {
               [CmdletBinding()]
@@ -1413,41 +1630,108 @@ properties:
               New-Item -ItemType Directory -Path $directory | Out-Null
               $scriptPath = Join-Path $directory 'apply.ps1'
               $resultPath = Join-Path $directory 'result.txt'
-              $powershell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+              $hostPath = Get-LockScreenPlaybackHostPath
               Set-Content -LiteralPath $scriptPath -Value (Get-LockScreenPlaybackWorkerScript) -Encoding ASCII
           
+              # -Verb RunAs forces UseShellExecute. An argument array is split on
+              # spaces, and $env:TEMP often contains spaces. Pass one quoted string.
+              $arguments = @(
+                  '-NoProfile'
+                  '-ExecutionPolicy'
+                  'Bypass'
+                  '-File'
+                  (ConvertTo-LockScreenPlaybackArgument $scriptPath)
+                  '-ResultPath'
+                  (ConvertTo-LockScreenPlaybackArgument $resultPath)
+              ) -join ' '
+          
+              $handleMessage = $null
               try
               {
-                  $process = Start-Process -FilePath $powershell -ArgumentList @(
-                      '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $scriptPath, '-ResultPath', $resultPath
-                  ) -Verb RunAs -PassThru
-                  if ($null -eq $process)
+                  $process = $null
+                  try
                   {
-                      throw 'Lock-screen playback did not start the elevated PowerShell process.'
+                      $process = Start-Process -FilePath $hostPath -ArgumentList $arguments -Verb RunAs -PassThru
                   }
-                  $process.WaitForExit()
-                  $result = ''
-                  if (Test-Path -LiteralPath $resultPath)
+                  catch
                   {
-                      $result = (Get-Content -LiteralPath $resultPath -Raw).Trim()
+                      $handleMessage = $_.Exception.Message
                   }
-                  if ($process.ExitCode -ne 0 -or $result -ne 'OK')
+          
+                  if ($null -eq $process -and [string]::IsNullOrWhiteSpace($handleMessage))
                   {
-                      if ([string]::IsNullOrWhiteSpace($result))
+                      $handleMessage = 'Lock-screen playback did not start the elevated PowerShell process.'
+                  }
+          
+                  if ($null -ne $process)
+                  {
+                      # WaitForExit and ExitCode throw (access denied, or the handle was
+                      # not started by this object) even after the elevated script wrote
+                      # OK. The result file is the only success signal. Do not read
+                      # ExitCode, and do not fail a completed OK write.
+                      $deadline = [datetime]::UtcNow.AddMinutes(10)
+                      while ([datetime]::UtcNow -lt $deadline)
                       {
-                          $result = "elevated PowerShell exited $($process.ExitCode)"
+                          $pending = Read-LockScreenPlaybackResult -Path $resultPath
+                          if (-not [string]::IsNullOrWhiteSpace($pending))
+                          {
+                              break
+                          }
+          
+                          try
+                          {
+                              if ($process.WaitForExit(500))
+                              {
+                                  break
+                              }
+                          }
+                          catch
+                          {
+                              $handleMessage = $_.Exception.Message
+                              Start-Sleep -Milliseconds 250
+                          }
                       }
-                      throw "Lock-screen playback settings were not applied. $result"
                   }
-              }
-              catch
-              {
-                  $message = $_.Exception.Message
-                  if ($message -match 'canceled by the user')
+          
+                  $result = Read-LockScreenPlaybackResult -Path $resultPath
+                  if ($result -ne 'OK')
+                  {
+                      # The elevated script writes OK and then exits. A handle error can
+                      # surface before that write is visible. Retry before failing a
+                      # completed apply. finally must not delete the file first.
+                      foreach ($delay in @(200, 400, 800))
+                      {
+                          if (-not [string]::IsNullOrWhiteSpace($result))
+                          {
+                              break
+                          }
+          
+                          Start-Sleep -Milliseconds $delay
+                          $result = Read-LockScreenPlaybackResult -Path $resultPath
+                      }
+                  }
+          
+                  if ($result -eq 'OK')
+                  {
+                      return
+                  }
+          
+                  if ($handleMessage -and $handleMessage -match 'canceled by the user')
                   {
                       throw 'Lock-screen playback settings require an elevated PowerShell session. Approve the administrator prompt.'
                   }
-                  throw
+          
+                  if ([string]::IsNullOrWhiteSpace($result))
+                  {
+                      if (-not [string]::IsNullOrWhiteSpace($handleMessage))
+                      {
+                          throw "Lock-screen playback settings were not applied. $handleMessage"
+                      }
+          
+                      throw 'Lock-screen playback settings were not applied.'
+                  }
+          
+                  throw "Lock-screen playback settings were not applied. $result"
               }
               finally
               {
@@ -1538,7 +1822,8 @@ properties:
           #
           # The policy is written to HKLM\SOFTWARE\Policies\Google\Chrome in the
           # 64-bit registry view. CreateSubKey creates the Google and Chrome keys
-          # when they are missing. winget configure runs elevated. Chrome applies
+          # when they are missing. The elevated lock-screen process writes that
+          # policy. winget configure itself stays a normal window. Chrome applies
           # this machine policy to every user. This script does not remove the value
           # later.
           #
@@ -1879,6 +2164,80 @@ properties:
               return $builder.ToString()
           }
           
+          function Get-LockScreenPlaybackHostPath
+          {
+              [CmdletBinding()]
+              param()
+          
+              # Launch the host that defined these functions. Windows PowerShell 5.1
+              # rejects PowerShell 7 syntax that only the elevated copy would run.
+              $current = $null
+              try
+              {
+                  $current = (Get-Process -Id $PID -ErrorAction Stop).Path
+              }
+              catch
+              {
+                  $current = $null
+              }
+          
+              if (-not [string]::IsNullOrWhiteSpace($current))
+              {
+                  return $current
+              }
+          
+              $name = 'powershell.exe'
+              if ($PSVersionTable.PSEdition -eq 'Core')
+              {
+                  $name = 'pwsh.exe'
+              }
+          
+              return (Join-Path $PSHOME $name)
+          }
+          
+          function ConvertTo-LockScreenPlaybackArgument
+          {
+              [CmdletBinding()]
+              param(
+                  [Parameter(Mandatory)]
+                  [string]$Value
+              )
+          
+              # UseShellExecute takes one command line. Quote every path, including
+              # those with no spaces, so TEMP values are not split.
+              return '"' + $Value.Replace('"', '""') + '"'
+          }
+          
+          function Read-LockScreenPlaybackResult
+          {
+              [CmdletBinding()]
+              param(
+                  [Parameter(Mandatory)]
+                  [string]$Path
+              )
+          
+              try
+              {
+                  if (-not (Test-Path -LiteralPath $Path))
+                  {
+                      return ''
+                  }
+          
+                  $text = Get-Content -LiteralPath $Path -Raw -ErrorAction SilentlyContinue
+              }
+              catch
+              {
+                  return ''
+              }
+          
+              if ($null -eq $text)
+              {
+                  return ''
+              }
+          
+              return ([string]$text).Trim()
+          }
+          
           function Start-LockScreenPlaybackElevated
           {
               [CmdletBinding()]
@@ -1888,41 +2247,108 @@ properties:
               New-Item -ItemType Directory -Path $directory | Out-Null
               $scriptPath = Join-Path $directory 'apply.ps1'
               $resultPath = Join-Path $directory 'result.txt'
-              $powershell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+              $hostPath = Get-LockScreenPlaybackHostPath
               Set-Content -LiteralPath $scriptPath -Value (Get-LockScreenPlaybackWorkerScript) -Encoding ASCII
           
+              # -Verb RunAs forces UseShellExecute. An argument array is split on
+              # spaces, and $env:TEMP often contains spaces. Pass one quoted string.
+              $arguments = @(
+                  '-NoProfile'
+                  '-ExecutionPolicy'
+                  'Bypass'
+                  '-File'
+                  (ConvertTo-LockScreenPlaybackArgument $scriptPath)
+                  '-ResultPath'
+                  (ConvertTo-LockScreenPlaybackArgument $resultPath)
+              ) -join ' '
+          
+              $handleMessage = $null
               try
               {
-                  $process = Start-Process -FilePath $powershell -ArgumentList @(
-                      '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $scriptPath, '-ResultPath', $resultPath
-                  ) -Verb RunAs -PassThru
-                  if ($null -eq $process)
+                  $process = $null
+                  try
                   {
-                      throw 'Lock-screen playback did not start the elevated PowerShell process.'
+                      $process = Start-Process -FilePath $hostPath -ArgumentList $arguments -Verb RunAs -PassThru
                   }
-                  $process.WaitForExit()
-                  $result = ''
-                  if (Test-Path -LiteralPath $resultPath)
+                  catch
                   {
-                      $result = (Get-Content -LiteralPath $resultPath -Raw).Trim()
+                      $handleMessage = $_.Exception.Message
                   }
-                  if ($process.ExitCode -ne 0 -or $result -ne 'OK')
+          
+                  if ($null -eq $process -and [string]::IsNullOrWhiteSpace($handleMessage))
                   {
-                      if ([string]::IsNullOrWhiteSpace($result))
+                      $handleMessage = 'Lock-screen playback did not start the elevated PowerShell process.'
+                  }
+          
+                  if ($null -ne $process)
+                  {
+                      # WaitForExit and ExitCode throw (access denied, or the handle was
+                      # not started by this object) even after the elevated script wrote
+                      # OK. The result file is the only success signal. Do not read
+                      # ExitCode, and do not fail a completed OK write.
+                      $deadline = [datetime]::UtcNow.AddMinutes(10)
+                      while ([datetime]::UtcNow -lt $deadline)
                       {
-                          $result = "elevated PowerShell exited $($process.ExitCode)"
+                          $pending = Read-LockScreenPlaybackResult -Path $resultPath
+                          if (-not [string]::IsNullOrWhiteSpace($pending))
+                          {
+                              break
+                          }
+          
+                          try
+                          {
+                              if ($process.WaitForExit(500))
+                              {
+                                  break
+                              }
+                          }
+                          catch
+                          {
+                              $handleMessage = $_.Exception.Message
+                              Start-Sleep -Milliseconds 250
+                          }
                       }
-                      throw "Lock-screen playback settings were not applied. $result"
                   }
-              }
-              catch
-              {
-                  $message = $_.Exception.Message
-                  if ($message -match 'canceled by the user')
+          
+                  $result = Read-LockScreenPlaybackResult -Path $resultPath
+                  if ($result -ne 'OK')
+                  {
+                      # The elevated script writes OK and then exits. A handle error can
+                      # surface before that write is visible. Retry before failing a
+                      # completed apply. finally must not delete the file first.
+                      foreach ($delay in @(200, 400, 800))
+                      {
+                          if (-not [string]::IsNullOrWhiteSpace($result))
+                          {
+                              break
+                          }
+          
+                          Start-Sleep -Milliseconds $delay
+                          $result = Read-LockScreenPlaybackResult -Path $resultPath
+                      }
+                  }
+          
+                  if ($result -eq 'OK')
+                  {
+                      return
+                  }
+          
+                  if ($handleMessage -and $handleMessage -match 'canceled by the user')
                   {
                       throw 'Lock-screen playback settings require an elevated PowerShell session. Approve the administrator prompt.'
                   }
-                  throw
+          
+                  if ([string]::IsNullOrWhiteSpace($result))
+                  {
+                      if (-not [string]::IsNullOrWhiteSpace($handleMessage))
+                      {
+                          throw "Lock-screen playback settings were not applied. $handleMessage"
+                      }
+          
+                      throw 'Lock-screen playback settings were not applied.'
+                  }
+          
+                  throw "Lock-screen playback settings were not applied. $result"
               }
               finally
               {
