@@ -354,8 +354,8 @@ function Get-LockScreenPlaybackHostPath
     [CmdletBinding()]
     param()
 
-    # Launch the host that defined these functions. Windows PowerShell 5.1
-    # rejects PowerShell 7 syntax that only the elevated copy would run.
+    # Use the current process only when it is PowerShell. winget configure
+    # runs this script in its configuration host, which cannot execute -File.
     $current = $null
     try
     {
@@ -368,16 +368,14 @@ function Get-LockScreenPlaybackHostPath
 
     if (-not [string]::IsNullOrWhiteSpace($current))
     {
-        return $current
+        $leaf = [System.IO.Path]::GetFileName($current)
+        if ($leaf -eq 'powershell.exe' -or $leaf -eq 'pwsh.exe')
+        {
+            return $current
+        }
     }
 
-    $name = 'powershell.exe'
-    if ($PSVersionTable.PSEdition -eq 'Core')
-    {
-        $name = 'pwsh.exe'
-    }
-
-    return (Join-Path $PSHOME $name)
+    return (Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe')
 }
 
 function ConvertTo-LockScreenPlaybackArgument
