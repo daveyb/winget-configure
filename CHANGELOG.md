@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-10-04
+
+### Added
+- `Shell.Profile` writes the PowerShell 7 `$PROFILE` with the oh-my-posh marcduiker init and `Import-Module Terminal-Icons`. The profile file is replaced with that text.
+- Terminal-Icons is installed from PSGallery for the current user. `JanDeDobbeleer.OhMyPosh` stays a winget package.
+- Departure Mono Nerd Font 3.5.1 is downloaded from the pinned Nerd Fonts zip and registered in the per-user Fonts folder. Windows Terminal `profiles.defaults` uses the face `DepartureMono Nerd Font`. Font settings on individual profiles are removed so every profile uses that face.
+- The Windows Terminal profile list puts PowerShell first, and `defaultProfile` opens that profile. Windows PowerShell stays later in the list.
+- `Install-Packages.ps1` applies the same steps after the package loop. If that step fails, the script warns and package installation continues.
+
+### Fixed
+- `Shell.Profile` reads its script path only when that property exists. `winget configure` runs the test script as a script block under StrictMode, and `MyCommand.Path` threw `PropertyNotFoundException` before the unit could test the profile.
+- Windows PowerShell 5.1 still has no path for that script block. Test, Set, and Get write the script to a temp file and relaunch it with pwsh. They no longer throw because `MyCommand.Path` and `PSCommandPath` are empty.
+- Windows Terminal `settings.json` comments are kept. The edit sets the default font, removes per-profile font keys, puts PowerShell first, and sets `defaultProfile`. The file is rewritten, so spacing can change. It does not rewrite the file through `System.Text.Json` and drop every comment.
+- Profile name, command line, source, and guid are read with `GetValue<string>()` via reflection. `JsonNode.ToString()` returns JSON text, so a quoted name was not a match and a second PowerShell profile could be inserted. The call is not written as `GetValue[string]()`, which Windows PowerShell 5.1 cannot parse, so the 5.1 relaunch can still start.
+- `Shell.Profile` depends on `Microsoft.PowerShell`, `Microsoft.WindowsTerminal`, and `JanDeDobbeleer.OhMyPosh`. It does not run until those packages are present. `Install-Packages.ps1` skips the same step unless those three succeeded.
+- Terminal-Icons still installs from PSGallery for the current user only. That install marks PSGallery Trusted for the call, then restores the previous InstallationPolicy. It does not leave a permanent current-user trust policy. `Uninstall-Module -Name Terminal-Icons -Scope CurrentUser` removes the module.
+
 ## [1.1.21] - 2026-10-03
 
 ### Fixed

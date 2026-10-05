@@ -7,6 +7,9 @@ on:
       - 'winget-packages.yml'
       - 'New-WingetConfiguration.ps1'
       - 'helpers/LockScreenPlayback.ps1'
+      - 'helpers/ShellProfile.ps1'
+      - 'helpers/ShellProfile.psm1'
+      - 'helpers/ShellProfile.Tests.ps1'
       - '.github/workflows/validate-config.yml'
   workflow_dispatch:
 
@@ -22,6 +25,11 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
+
+      - name: Test shell profile transform
+        shell: pwsh
+        run: |
+          .\helpers\ShellProfile.Tests.ps1
 
       - name: Generate configuration.dsc.yaml
         shell: pwsh
