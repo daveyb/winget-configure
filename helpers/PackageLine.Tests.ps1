@@ -91,35 +91,64 @@ Assert-ThrowsToken { ConvertFrom-PackageLine -Text '9NCBCSZSJRSB msstore' } 'mss
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $packagesFile = Join-Path $repoRoot 'winget-packages.yml'
 $dscPath = Join-Path $repoRoot '.configurations\configuration.dsc.yaml'
-$backupPath = Join-Path $env:TEMP ('package-line-backup-' + [guid]::NewGuid().ToString('n') + '.yml')
-$fixturePath = Join-Path $env:TEMP ('package-line-fixture-' + [guid]::NewGuid().ToString('n') + '.yml')
+$fixtureRoot = Join-Path $env:TEMP ('package-line-repo-' + [guid]::NewGuid().ToString('n'))
+$fixtureYaml = Join-Path $fixtureRoot 'winget-packages.yml'
 $outputPath = Join-Path $env:TEMP ('package-line-dsc-' + [guid]::NewGuid().ToString('n') + '.yaml')
-$fixture = @"
+$previous = @"
+packages:
+  development:
+    - Git.Git # Git version control
+  media_entertainment:
+    - Spotify.Spotify # Spotify music streaming
+"@
+$current = @"
 packages:
   development:
     - Git.Git # Git version control
   media_entertainment:
     - 9NCBCSZSJRSB source: msstore # Spotify (Microsoft Store)
 "@
-if ($fixture.Contains('Spotify.Spotify'))
+if ($current.Contains('Spotify.Spotify'))
 {
-    throw 'fixture contains Spotify.Spotify'
+    throw 'current fixture contains Spotify.Spotify'
+}
+if (-not $previous.Contains('Spotify.Spotify'))
+{
+    throw 'previous fixture is missing Spotify.Spotify'
 }
 $utf8 = New-Object System.Text.UTF8Encoding $false
-[System.IO.File]::WriteAllText($fixturePath, ($fixture -replace "`n", "`r`n"), $utf8)
 
 $dscBefore = $null
 if (Test-Path -LiteralPath $dscPath)
 {
     $dscBefore = [System.IO.File]::ReadAllBytes($dscPath)
 }
+$packagesBefore = [System.IO.File]::ReadAllBytes($packagesFile)
 
-Copy-Item -LiteralPath $packagesFile -Destination $backupPath -Force
 try
 {
-    Copy-Item -LiteralPath $fixturePath -Destination $packagesFile -Force
+    New-Item -ItemType Directory -Path $fixtureRoot -Force | Out-Null
+    [System.IO.File]::WriteAllText($fixtureYaml, ($previous -replace "`n", "`r`n"), $utf8)
+    $PSNativeCommandUseErrorActionPreference = $false
+    $init = & git -C $fixtureRoot init -b fixture 2>&1
+    if ($LASTEXITCODE -ne 0)
+    {
+        throw ("git init exited {0}: {1}" -f $LASTEXITCODE, ($init | Out-String))
+    }
+    $add = & git -C $fixtureRoot add -- winget-packages.yml 2>&1
+    if ($LASTEXITCODE -ne 0)
+    {
+        throw ("git add exited {0}: {1}" -f $LASTEXITCODE, ($add | Out-String))
+    }
+    $commit = & git -C $fixtureRoot -c user.name=fixture -c user.email=fixture@example.com -c commit.gpgsign=false commit -m 'previous packages' 2>&1
+    if ($LASTEXITCODE -ne 0)
+    {
+        throw ("git commit exited {0}: {1}" -f $LASTEXITCODE, ($commit | Out-String))
+    }
+    [System.IO.File]::WriteAllText($fixtureYaml, ($current -replace "`n", "`r`n"), $utf8)
+
     $generator = Join-Path $repoRoot 'New-WingetConfiguration.ps1'
-    $run = & pwsh -NoProfile -File $generator -PackagesFile $packagesFile -OutputFile $outputPath -Force -CompareRef HEAD 2>&1
+    $run = & pwsh -NoProfile -File $generator -PackagesFile $fixtureYaml -OutputFile $outputPath -Force -CompareRef HEAD 2>&1
     $code = $LASTEXITCODE
     if ($code -ne 0)
     {
@@ -136,12 +165,11 @@ try
 }
 finally
 {
-    if (Test-Path -LiteralPath $backupPath)
+    if (Test-Path -LiteralPath $fixtureRoot)
     {
-        Copy-Item -LiteralPath $backupPath -Destination $packagesFile -Force
-        Remove-Item -LiteralPath $backupPath -Force
+        Remove-Item -LiteralPath $fixtureRoot -Recurse -Force -ErrorAction SilentlyContinue
     }
-    Remove-Item -LiteralPath $fixturePath, $outputPath -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $outputPath -Force -ErrorAction SilentlyContinue
 }
 
 if ($null -ne $dscBefore)
@@ -152,6 +180,12 @@ if ($null -ne $dscBefore)
     {
         throw 'generator test overwrote configuration.dsc.yaml'
     }
+}
+$packagesAfter = [System.IO.File]::ReadAllBytes($packagesFile)
+$samePackages = [System.Linq.Enumerable]::SequenceEqual($packagesBefore, $packagesAfter)
+if (-not $samePackages)
+{
+    throw 'generator test overwrote winget-packages.yml'
 }
 
 Write-Output 'PackageLine tests passed'
