@@ -12,12 +12,11 @@
     the desired state:
 
     - Packages present in the current YAML are emitted with `ensure: Present`.
-    - A package id and source removed from the current YAML, but present in the
-      previous (HEAD) YAML, is kept as a resource with `ensure: Absent`. A source
-      change on the same id emits Absent for the old source.
+    - Packages removed from the current YAML, but present in the previous (HEAD)
+      YAML, are kept as resources but emitted with `ensure: Absent`.
     - If a package resource is already `ensure: Absent` in the existing DSC output,
-      AND that id and source are not in the previous (HEAD) YAML or the current
-      YAML, then the resource is removed entirely from the generated DSC output.
+      AND that package is not present in the previous (HEAD) YAML, then the resource
+      is removed entirely from the generated DSC output.
 
     This provides a clean lifecycle:
       Present (in YAML) -> Absent tombstone (first commit after removal) -> pruned (next commit)
@@ -53,7 +52,6 @@
 .NOTES
     - Git must be installed and available on PATH for removal tracking.
     - Comparison is case-sensitive (winget IDs are case-sensitive).
-    - Present, Absent, and stale-Absent pruning are keyed by id and source.
     - Use -CompareRef HEAD~1 in CI where HEAD is already the current commit.
 #>
 
@@ -356,20 +354,6 @@ function Read-PackagesYaml
 
 # ── DSC parsing (existing configuration.dsc.yaml) ─────────────────────────────
 
-function Get-PackageIdentity
-{
-    param(
-        [Parameter(Mandatory)][string]$Id,
-        [Parameter(Mandatory)][string]$Source
-    )
-
-    if ([string]::IsNullOrEmpty($Source))
-    {
-        $Source = 'winget'
-    }
-    return ('{0}|{1}' -f $Id, $Source)
-}
-
 function Read-DscEnsureMap
 {
     [CmdletBinding()]
@@ -393,12 +377,10 @@ function Read-DscEnsureMap
 
     $inBlock = $false
     $blockId = $null
-    $blockSource = 'winget'
     $blockEnsure = 'Present' # Default
 
     $resourceStart = [regex]'^\s*-\s*resource:\s*Microsoft\.WinGet\.DSC/WinGetPackage\s*$'
     $idRegex = [regex]'^\s*id:\s*(\S+)\s*$'
-    $sourceRegex = [regex]'^\s*source:\s*(\S+)\s*$'
     $ensureRegex = [regex]'^\s*ensure:\s*(\S+)\s*$'
 
     foreach ($line in $lines)
@@ -408,13 +390,12 @@ function Read-DscEnsureMap
             # Commit the prior block
             if ($inBlock -and $blockId)
             {
-                $map[(Get-PackageIdentity -Id $blockId -Source $blockSource)] = $blockEnsure
+                $map[$blockId] = $blockEnsure
             }
 
             # Start a new block
             $inBlock = $true
             $blockId = $null
-            $blockSource = 'winget'
             $blockEnsure = 'Present'
             continue
         }
@@ -430,13 +411,6 @@ function Read-DscEnsureMap
             continue
         }
 
-        $mSource = $sourceRegex.Match($line)
-        if ($mSource.Success)
-        {
-            $blockSource = $mSource.Groups[1].Value
-            continue
-        }
-
         $mEnsure = $ensureRegex.Match($line)
         if ($mEnsure.Success)
         {
@@ -448,7 +422,7 @@ function Read-DscEnsureMap
     # Commit final block
     if ($inBlock -and $blockId)
     {
-        $map[(Get-PackageIdentity -Id $blockId -Source $blockSource)] = $blockEnsure
+        $map[$blockId] = $blockEnsure
     }
 
     return $map
@@ -845,16 +819,15 @@ if ($currentEntries.Count -eq 0)
     throw "No packages found or processed from '$PackagesFile'."
 }
 
-# Build current identity set (id + source, case-sensitive)
-$currentKeys = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::Ordinal)
+# Build current ID set (case-sensitive)
+$currentIds = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::Ordinal)
 foreach ($e in $currentEntries)
-{
-    $null = $currentKeys.Add((Get-PackageIdentity -Id ([string]$e.Id) -Source ([string]$e.Source)))
+{ $null = $currentIds.Add([string]$e.Id)
 }
 
 # Step 1: Load previous YAML (Git HEAD)
 $prevEntries = New-Object System.Collections.Generic.List[hashtable]
-$prevKeys = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::Ordinal)
+$prevIds = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::Ordinal)
 
 $gitAvailable = Test-GitAvailable
 if (-not $gitAvailable)
@@ -898,8 +871,7 @@ if (-not $gitAvailable)
                 }
 
                 foreach ($p in $prevEntries)
-                {
-                    $null = $prevKeys.Add((Get-PackageIdentity -Id ([string]$p.Id) -Source ([string]$p.Source)))
+                { $null = $prevIds.Add([string]$p.Id)
                 }
             } else
             {
@@ -912,34 +884,34 @@ if (-not $gitAvailable)
 # Step 2: Read existing DSC ensures (for pruning stale Absent)
 $existingEnsure = Read-DscEnsureMap -Path $OutputFile
 
-# Step 3: Determine removals and pruning (id + source)
-$removedKeys = New-Object 'System.Collections.Generic.List[string]'
-foreach ($key in $prevKeys)
+# Step 3: Determine removals and pruning
+$removedIds = New-Object 'System.Collections.Generic.List[string]'
+foreach ($id in $prevIds)
 {
-    if (-not $currentKeys.Contains($key))
+    if (-not $currentIds.Contains($id))
     {
-        $removedKeys.Add($key) | Out-Null
+        $removedIds.Add($id) | Out-Null
     }
 }
 
 # Stale Absent pruning:
-# If existing has ensure: Absent, and that id+source is NOT in previous YAML (HEAD),
+# If existing has ensure: Absent, and the package is NOT in previous YAML (HEAD),
 # and NOT in current YAML (working tree), then remove it entirely.
-$prunedKeys = New-Object 'System.Collections.Generic.List[string]'
+$prunedIds = New-Object 'System.Collections.Generic.List[string]'
 foreach ($kv in $existingEnsure.GetEnumerator())
 {
-    $key = [string]$kv.Key
+    $id = [string]$kv.Key
     $ensure = [string]$kv.Value
 
-    if ($ensure -eq 'Absent' -and (-not $currentKeys.Contains($key)) -and (-not $prevKeys.Contains($key)))
+    if ($ensure -eq 'Absent' -and (-not $currentIds.Contains($id)) -and (-not $prevIds.Contains($id)))
     {
-        $prunedKeys.Add($key) | Out-Null
+        $prunedIds.Add($id) | Out-Null
     }
 }
 
 $prunedSet = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::Ordinal)
-foreach ($key in $prunedKeys)
-{ $null = $prunedSet.Add($key)
+foreach ($id in $prunedIds)
+{ $null = $prunedSet.Add($id)
 }
 
 # Step 4: Build desired entries list (stable order)
@@ -957,20 +929,19 @@ foreach ($e in $currentEntries)
         }) | Out-Null
 }
 
-# Absent tombstones: previous id+source missing from current (in prev order).
-# A source change on the same id still emits Absent for the old source.
-if ($removedKeys.Count -gt 0)
+# Absent tombstones: in prev YAML but removed now (in prev order)
+if ($removedIds.Count -gt 0)
 {
     foreach ($e in $prevEntries)
     {
-        $key = Get-PackageIdentity -Id ([string]$e.Id) -Source ([string]$e.Source)
-        if ($currentKeys.Contains($key))
+        $id = [string]$e.Id
+        if ($currentIds.Contains($id))
         { continue
         }
-        if (-not $prevKeys.Contains($key))
+        if (-not $prevIds.Contains($id))
         { continue
         } # defensive
-        if ($prunedSet.Contains($key))
+        if ($prunedSet.Contains($id))
         { continue
         }    # if somehow stale (shouldn't be), prune wins
 
@@ -1004,38 +975,38 @@ if ((Test-Path $OutputFile) -and -not $Force)
 }
 
 # Step 7: Summary
-# Added identities are current id+source minus previous id+source
-$addedKeys = New-Object 'System.Collections.Generic.List[string]'
-foreach ($key in $currentKeys)
+# Added IDs are current - previous
+$addedIds = New-Object 'System.Collections.Generic.List[string]'
+foreach ($id in $currentIds)
 {
-    if (-not $prevKeys.Contains($key))
+    if (-not $prevIds.Contains($id))
     {
-        $addedKeys.Add($key) | Out-Null
+        $addedIds.Add($id) | Out-Null
     }
 }
 
 Write-Host ''
 Write-Host '=== Change Summary (vs Git HEAD) ===' -ForegroundColor Cyan
 Write-Host ("Current YAML packages : {0}" -f $currentEntries.Count) -ForegroundColor White
-if ($prevKeys.Count -gt 0)
+if ($prevIds.Count -gt 0)
 {
-    Write-Host ("Previous YAML packages: {0}" -f $prevKeys.Count) -ForegroundColor White
+    Write-Host ("Previous YAML packages: {0}" -f $prevIds.Count) -ForegroundColor White
 } else
 {
     Write-Host "Previous YAML packages: (unknown / unavailable)" -ForegroundColor Yellow
 }
-Write-Host ("Added (Present)       : {0}" -f $addedKeys.Count) -ForegroundColor Green
-Write-Host ("Removed -> Absent      : {0}" -f $removedKeys.Count) -ForegroundColor Yellow
-Write-Host ("Pruned stale Absent    : {0}" -f $prunedKeys.Count) -ForegroundColor Gray
+Write-Host ("Added (Present)       : {0}" -f $addedIds.Count) -ForegroundColor Green
+Write-Host ("Removed -> Absent      : {0}" -f $removedIds.Count) -ForegroundColor Yellow
+Write-Host ("Pruned stale Absent    : {0}" -f $prunedIds.Count) -ForegroundColor Gray
 Write-Host ''
 
 # Step 7b: Write machine-readable changes file (for CI consumption)
 if (-not [string]::IsNullOrWhiteSpace($ChangesOutputFile))
 {
     $changesData = @{
-        added   = @($addedKeys | ForEach-Object { $_.ToString() })
-        removed = @($removedKeys | ForEach-Object { $_.ToString() })
-        pruned  = @($prunedKeys | ForEach-Object { $_.ToString() })
+        added   = @($addedIds | ForEach-Object { $_.ToString() })
+        removed = @($removedIds | ForEach-Object { $_.ToString() })
+        pruned  = @($prunedIds | ForEach-Object { $_.ToString() })
         total   = $finalEntries.Count
     }
     $changesJson = $changesData | ConvertTo-Json -Depth 3
