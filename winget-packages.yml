@@ -64,7 +64,7 @@ packages:
 
   # ── Media & entertainment ─────────────────────────────────────────────────────
   media_entertainment:
-    - Spotify.Spotify # Spotify music streaming
+    - 9NCBCSZSJRSB source: msstore # Spotify (Microsoft Store)
     - VideoLAN.VLC # VLC media player
     - GuinpinSoft.MakeMKV # MakeMKV disc ripper
     - Gyan.FFmpeg # FFmpeg multimedia framework

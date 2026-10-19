@@ -146,6 +146,12 @@ packages:
     - eloston.ungoogled-chromium
 ```
 
+A line with no source marker installs from the winget source. A Microsoft Store app puts `source: msstore` on that same line.
+
+```yaml
+    - 9NCBCSZSJRSB source: msstore # Spotify (Microsoft Store)
+```
+
 After saving your changes, regenerate and apply:
 
 ```powershell
