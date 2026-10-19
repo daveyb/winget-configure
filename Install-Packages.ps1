@@ -59,6 +59,8 @@ param(
     [switch]$Thermonuclear
 )
 
+. (Join-Path $PSScriptRoot 'helpers\PackageLine.ps1')
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 function Uninstall-WingetPackage
@@ -70,6 +72,9 @@ function Uninstall-WingetPackage
     .PARAMETER PackageId
         The winget package ID to uninstall.
 
+    .PARAMETER Source
+        The package source. winget or msstore.
+
     .OUTPUTS
         Hashtable with keys: PackageId, Success, Message.
     #>
@@ -77,6 +82,10 @@ function Uninstall-WingetPackage
     param(
         [Parameter(Mandatory)]
         [string]$PackageId,
+
+        [Parameter(Mandatory)]
+        [string]$Source,
+
         [switch]$Quiet
     )
 
@@ -94,6 +103,7 @@ function Uninstall-WingetPackage
             'uninstall',
             '--id',    $PackageId,
             '--exact',
+            '--source', $Source,
             '--silent'
         )
 
@@ -149,19 +159,19 @@ function Write-ProgressWarning
 #   packages:
 #     category_name:       ← ignored (category header)
 #       - PackageId        ← collected
-#       - PackageId  # optional inline comment  ← collected, comment stripped
+#       - PackageId source: msstore # optional inline comment
 #
 # Rules:
 #   • Lines whose first non-whitespace character is '#' are comments → skip.
 #   • Blank lines → skip.
-#   • Lines that match /^\s+-\s+(\S+)/ are list items → capture group 1.
+#   • Indented list items are parsed by ConvertFrom-PackageLine.
 #   • Everything else (top-level keys, category keys) → skip.
 
 function Read-WingetPackagesYaml
 {
     <#
     .SYNOPSIS
-        Parses a winget-packages.yml file and returns a flat array of package IDs.
+        Parses a winget-packages.yml file and returns package entries with Id and Source.
 
     .PARAMETER Path
         Full path to the YAML file.
@@ -178,7 +188,7 @@ function Read-WingetPackagesYaml
         return @()
     }
 
-    $packages = [System.Collections.Generic.List[string]]::new()
+    $packages = [System.Collections.Generic.List[hashtable]]::new()
 
     foreach ($line in Get-Content -Path $Path -Encoding UTF8)
     {
@@ -192,25 +202,15 @@ function Read-WingetPackagesYaml
         { continue 
         }
 
-        # Capture list items:  <whitespace> - <PackageId> [# optional comment]
-        if ($line -match '^\s+-\s+(\S+)')
+        if ($line -match '^\s+-\s+')
         {
-            $packageId = $Matches[1].Trim()
-
-            # Strip any trailing inline comment that somehow ended up attached
-            # (e.g. if the ID were written without a space before #)
-            $packageId = $packageId -replace '#.*$', ''
-            $packageId = $packageId.Trim()
-
-            if ($packageId -ne '')
-            {
-                $packages.Add($packageId)
-            }
+            $packages.Add((ConvertFrom-PackageLine -Text $line))
         }
         # All other lines (keys, separators, etc.) are intentionally ignored.
     }
 
-    return $packages.ToArray()
+    # A bare return enumerates one hashtable as dictionary entries.
+    return ,$packages.ToArray()
 }
 
 # ── Package installer ─────────────────────────────────────────────────────────
@@ -224,6 +224,9 @@ function Install-WingetPackage
     .PARAMETER PackageId
         The winget package ID to install.
 
+    .PARAMETER Source
+        The package source. winget or msstore.
+
     .PARAMETER Force
         Forces installation even if already installed.
 
@@ -234,6 +237,10 @@ function Install-WingetPackage
     param(
         [Parameter(Mandatory)]
         [string]$PackageId,
+
+        [Parameter(Mandatory)]
+        [string]$Source,
+
         [switch]$Force,
         [switch]$Quiet
     )
@@ -252,7 +259,7 @@ function Install-WingetPackage
         # Check if already installed (skip when -Force is set)
         if (-not $Force)
         {
-            $listOutput = winget list --id $PackageId --exact 2>$null
+            $listOutput = winget list --id $PackageId --exact --source $Source 2>$null
             if ($LASTEXITCODE -eq 0 -and $listOutput -match [regex]::Escape($PackageId))
             {
                 $result.AlreadyInstalled = $true
@@ -269,6 +276,7 @@ function Install-WingetPackage
             'install',
             '--id',    $PackageId,
             '--exact',
+            '--source', $Source,
             '--silent',
             '--accept-package-agreements',
             '--accept-source-agreements'
@@ -354,9 +362,14 @@ if (Test-Path -LiteralPath $shellHelperPath)
 #   2. -ConfigFile parameter  (explicit YAML path)
 #   3. winget-packages.yml next to this script (default)
 
+$packageEntries = [System.Collections.Generic.List[hashtable]]::new()
 if ($PSBoundParameters.ContainsKey('PackageList') -and $PackageList.Count -gt 0)
 {
     Write-ProgressInfo 'Using package list supplied via -PackageList parameter.' -Quiet:$Quiet
+    foreach ($packageLine in $PackageList)
+    {
+        $packageEntries.Add((ConvertFrom-PackageLine -Text $packageLine))
+    }
 } else
 {
     # Resolve config file path
@@ -367,15 +380,18 @@ if ($PSBoundParameters.ContainsKey('PackageList') -and $PackageList.Count -gt 0)
 
     Write-ProgressInfo "Loading package list from: $ConfigFile" -Quiet:$Quiet
 
-    $PackageList = Read-WingetPackagesYaml -Path $ConfigFile
+    foreach ($packageEntry in (Read-WingetPackagesYaml -Path $ConfigFile))
+    {
+        $packageEntries.Add($packageEntry)
+    }
 
-    if ($PackageList.Count -eq 0)
+    if ($packageEntries.Count -eq 0)
     {
         Write-Error "No packages found in '$ConfigFile'. Aborting."
         exit 1
     }
 
-    Write-ProgressSuccess "✓ Loaded $($PackageList.Count) packages from YAML" -Quiet:$Quiet
+    Write-ProgressSuccess "✓ Loaded $($packageEntries.Count) packages from YAML" -Quiet:$Quiet
 }
 
 Write-Host ''
@@ -439,7 +455,7 @@ if ($Thermonuclear)
 {
     Write-ProgressInfo '!!! THERMONUCLEAR MODE ENABLED: Uninstalling all packages !!!' -Quiet:$Quiet
 }
-Write-ProgressInfo "Packages to process: $($PackageList.Count)" -Quiet:$Quiet
+Write-ProgressInfo "Packages to process: $($packageEntries.Count)" -Quiet:$Quiet
 Write-Host ''
 
 $results              = @()
@@ -447,23 +463,23 @@ $successCount         = 0
 $alreadyInstalledCount = 0
 $failedCount          = 0
 
-foreach ($package in $PackageList)
+foreach ($package in $packageEntries)
 {
     if ($Thermonuclear)
     {
-        $result = Uninstall-WingetPackage -PackageId $package -Quiet:$Quiet
+        $result = Uninstall-WingetPackage -PackageId $package.Id -Source $package.Source -Quiet:$Quiet
     } else
     {
-        if (($package -eq 'Microsoft.WSL') -and (Get-Command -Name Update-Wsl -ErrorAction SilentlyContinue))
+        if (($package.Id -eq 'Microsoft.WSL') -and (Get-Command -Name Update-Wsl -ErrorAction SilentlyContinue))
         {
             # Skip winget: a blocking Microsoft.WSL pin makes install/upgrade
             # fail with a pin error (not 0x80073d28), so the old fallback
             # never ran. Match winget configure: always use Update-Wsl.
-            Write-ProgressInfo "Processing package: $package" -Quiet:$Quiet
+            Write-ProgressInfo "Processing package: $($package.Id)" -Quiet:$Quiet
             Write-ProgressInfo "  └─ Skipping winget; using wsl --update --web-download" -Quiet:$Quiet
             $wslResult = Update-Wsl -Quiet:$Quiet
             $result = @{
-                PackageId        = $package
+                PackageId        = $package.Id
                 Success          = [bool]$wslResult.Success
                 Message          = [string]$wslResult.Message
                 AlreadyInstalled = $false
@@ -479,7 +495,7 @@ foreach ($package in $PackageList)
         }
         else
         {
-            $result = Install-WingetPackage -PackageId $package -Force:$Force -Quiet:$Quiet
+            $result = Install-WingetPackage -PackageId $package.Id -Source $package.Source -Force:$Force -Quiet:$Quiet
         }
     }
     $results += $result
@@ -559,7 +575,7 @@ if (-not $Thermonuclear)
 # Step 5: Summary ──────────────────────────────────────────────────────────────
 Write-Host ''
 Write-Host "=== $(if ($Thermonuclear) { 'Uninstallation' } else { 'Installation' }) Summary ===" -ForegroundColor Cyan
-Write-Host "Total packages processed : $($PackageList.Count)" -ForegroundColor White
+Write-Host "Total packages processed : $($packageEntries.Count)" -ForegroundColor White
 Write-Host "Successfully $(if ($Thermonuclear) { 'uninstalled' } else { 'installed' })   : $successCount" -ForegroundColor Green
 if (-not $Thermonuclear)
 {
