@@ -67,6 +67,8 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+. (Join-Path $PSScriptRoot 'helpers\PackageLine.ps1')
+
 # ── Constants ─────────────────────────────────────────────────────────────────
 
 $DSC_SCHEMA_COMMENT = '# yaml-language-server: $schema=https://aka.ms/configuration-dsc-schema/0.2'
@@ -86,6 +88,41 @@ function Write-Warn
 
 # ── Path helpers (PowerShell 5.1 compatible) ─────────────────────────────────
 
+function Resolve-CanonicalPath
+{
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$Path
+    )
+
+    $full = (Resolve-Path -LiteralPath $Path).Path
+    if (-not ('WingetConfigure.NativePath' -as [type]))
+    {
+        Add-Type -TypeDefinition @'
+using System.Runtime.InteropServices;
+using System.Text;
+namespace WingetConfigure
+{
+    public static class NativePath
+    {
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        public static extern uint GetLongPathName(string shortPath, StringBuilder buffer, uint bufferSize);
+    }
+}
+'@
+    }
+
+    # 8.3 short names and git's long path do not share a prefix.
+    $buffer = New-Object System.Text.StringBuilder 4096
+    $length = [WingetConfigure.NativePath]::GetLongPathName($full, $buffer, [uint32]$buffer.Capacity)
+    if ($length -gt 0 -and $length -lt $buffer.Capacity)
+    {
+        return $buffer.ToString()
+    }
+
+    return $full
+}
+
 function Get-RelativePath
 {
     [CmdletBinding()]
@@ -94,8 +131,8 @@ function Get-RelativePath
         [Parameter(Mandatory)][string]$TargetPath
     )
 
-    $baseFull = (Resolve-Path -Path $BasePath).Path.TrimEnd('\') + '\'
-    $targetFull = (Resolve-Path -Path $TargetPath).Path
+    $baseFull = (Resolve-CanonicalPath -Path $BasePath).TrimEnd('\') + '\'
+    $targetFull = Resolve-CanonicalPath -Path $TargetPath
 
     $baseUri = New-Object System.Uri($baseFull)
     $targetUri = New-Object System.Uri($targetFull)
@@ -111,6 +148,8 @@ function Get-RelativePath
 
 function Test-GitAvailable
 {
+    $previousPreference = $PSNativeCommandUseErrorActionPreference
+    $PSNativeCommandUseErrorActionPreference = $false
     try
     {
         $null = & git --version 2>$null
@@ -118,6 +157,9 @@ function Test-GitAvailable
     } catch
     {
         return $false
+    } finally
+    {
+        $PSNativeCommandUseErrorActionPreference = $previousPreference
     }
 }
 
@@ -128,15 +170,20 @@ function Get-GitRepoRoot
         [Parameter(Mandatory)][string]$StartDirectory
     )
 
+    $previousPreference = $PSNativeCommandUseErrorActionPreference
+    $PSNativeCommandUseErrorActionPreference = $false
     try
     {
         $root = & git -C $StartDirectory rev-parse --show-toplevel 2>$null
-        if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($root))
+        if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace([string]$root))
         {
-            return $root.Trim()
+            return ([string]$root).Trim()
         }
     } catch
     {
+    } finally
+    {
+        $PSNativeCommandUseErrorActionPreference = $previousPreference
     }
 
     return $null
@@ -155,16 +202,49 @@ function Get-GitFileContentAtRef
     $gitPath = $RepoRelativePath.Replace('\', '/')
     $spec = "${Ref}:${gitPath}"
 
+    $previousPreference = $PSNativeCommandUseErrorActionPreference
+    $PSNativeCommandUseErrorActionPreference = $false
+    $previousEncoding = $null
+    $encodingChanged = $false
     try
     {
-        $content = & git -C $RepoRoot show $spec 2>$null
+        try
+        {
+            $previousEncoding = [Console]::OutputEncoding
+            # winget-packages.yml is UTF-8. The console code page splits the category banner.
+            [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false
+            $encodingChanged = $true
+        } catch
+        {
+            Write-Warning "Console encoding was left unchanged. $($_.Exception.Message)"
+        }
+
+        $content = @(& git -C $RepoRoot --no-pager show $spec 2>&1)
+        $errors = @($content | Where-Object { $_ -is [System.Management.Automation.ErrorRecord] })
+        $lines = @($content | Where-Object { $_ -isnot [System.Management.Automation.ErrorRecord] })
         if ($LASTEXITCODE -eq 0)
         {
-            return $content
+            # A bare return enumerates the line array.
+            return ,$lines
         }
+
+        $detail = @($errors + $lines) | Out-String
+        Write-Warning "Git show failed for ${spec}: $detail"
     } catch
     {
         Write-Warning "Git command failed: $($_.Exception.Message)"
+    } finally
+    {
+        $PSNativeCommandUseErrorActionPreference = $previousPreference
+        if ($encodingChanged -and $null -ne $previousEncoding)
+        {
+            try
+            {
+                [Console]::OutputEncoding = $previousEncoding
+            } catch
+            {
+            }
+        }
     }
 
     return $null
@@ -225,23 +305,15 @@ function Parse-PackagesYamlLines
         }
 
         # Package list items like "    - Git.Git # comment"
-        if ($rawLine -match '^\s*-\s+([^\s#]+)(?:\s+#\s*(.*))?\s*$')
+        if ($rawLine -match '^\s*-\s+')
         {
-            $id = $Matches[1].Trim()
-            $comment = ''
-            if ($Matches.Count -ge 3 -and $null -ne $Matches[2])
-            {
-                $comment = $Matches[2].Trim()
-            }
-
-            if (-not [string]::IsNullOrWhiteSpace($id))
-            {
-                $entries.Add(@{
-                        Id       = $id
-                        Category = $currentCategory
-                        Comment  = $comment
-                    })
-            }
+            $parsed = ConvertFrom-PackageLine -Text $rawLine
+            $entries.Add(@{
+                    Id       = $parsed.Id
+                    Source   = $parsed.Source
+                    Category = $currentCategory
+                    Comment  = $parsed.Comment
+                })
         }
     }
 
@@ -693,7 +765,7 @@ function Build-DscYaml
         $null = $sb.AppendLine('        allowPrerelease: true')
         $null = $sb.AppendLine('      settings:')
         $null = $sb.AppendLine("        id: $($entry.Id)")
-        $null = $sb.AppendLine('        source: winget')
+        $null = $sb.AppendLine("        source: $($entry.Source)")
         $null = $sb.AppendLine("        ensure: $ensure")
     }
 
@@ -850,6 +922,7 @@ foreach ($e in $currentEntries)
 {
     $finalEntries.Add(@{
             Id       = $e.Id
+            Source   = $e.Source
             Category = $e.Category
             Comment  = $e.Comment
             Ensure   = 'Present'
@@ -874,6 +947,7 @@ if ($removedIds.Count -gt 0)
 
         $finalEntries.Add(@{
                 Id       = $e.Id
+                Source   = $e.Source
                 Category = $e.Category
                 Comment  = $e.Comment
                 Ensure   = 'Absent'

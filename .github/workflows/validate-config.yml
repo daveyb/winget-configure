@@ -10,6 +10,9 @@ on:
       - 'helpers/ShellProfile.ps1'
       - 'helpers/ShellProfile.psm1'
       - 'helpers/ShellProfile.Tests.ps1'
+      - 'helpers/PackageLine.ps1'
+      - 'helpers/PackageLine.Tests.ps1'
+      - 'Install-Packages.ps1'
       - '.github/workflows/validate-config.yml'
   workflow_dispatch:
 
@@ -30,6 +33,11 @@ jobs:
         shell: pwsh
         run: |
           .\helpers\ShellProfile.Tests.ps1
+
+      - name: Test package line parser
+        shell: pwsh
+        run: |
+          .\helpers\PackageLine.Tests.ps1
 
       - name: Generate configuration.dsc.yaml
         shell: pwsh
