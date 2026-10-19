@@ -182,6 +182,10 @@ try
     {
         throw ("New-WingetConfiguration.ps1 exited {0}: {1}" -f $code, $runText)
     }
+    if ($runText -notmatch 'Comparing against:\s+HEAD:winget-packages\.yml(\s|$)')
+    {
+        throw ("generator compared against the wrong git path: {0}" -f $runText)
+    }
     if (-not (Test-Path -LiteralPath $outputPath))
     {
         throw "New-WingetConfiguration.ps1 did not write $outputPath"

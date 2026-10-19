@@ -88,6 +88,29 @@ function Write-Warn
 
 # ── Path helpers (PowerShell 5.1 compatible) ─────────────────────────────────
 
+function Resolve-CanonicalPath
+{
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$Path
+    )
+
+    $full = (Resolve-Path -LiteralPath $Path).Path
+    try
+    {
+        # 8.3 short names and git's long path do not share a prefix.
+        $fso = New-Object -ComObject Scripting.FileSystemObject
+        if (Test-Path -LiteralPath $full -PathType Container)
+        {
+            return $fso.GetFolder($full).Path
+        }
+        return $fso.GetFile($full).Path
+    } catch
+    {
+        return $full
+    }
+}
+
 function Get-RelativePath
 {
     [CmdletBinding()]
@@ -96,8 +119,8 @@ function Get-RelativePath
         [Parameter(Mandatory)][string]$TargetPath
     )
 
-    $baseFull = (Resolve-Path -Path $BasePath).Path.TrimEnd('\') + '\'
-    $targetFull = (Resolve-Path -Path $TargetPath).Path
+    $baseFull = (Resolve-CanonicalPath -Path $BasePath).TrimEnd('\') + '\'
+    $targetFull = Resolve-CanonicalPath -Path $TargetPath
 
     $baseUri = New-Object System.Uri($baseFull)
     $targetUri = New-Object System.Uri($targetFull)
