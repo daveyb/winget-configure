@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Spotify installs from the Microsoft Store package `9NCBCSZSJRSB`. The winget package `Spotify.Spotify` is removed.
 
+### Fixed
+- Package removal is keyed by id and source. A line that keeps its id and changes source emits `ensure: Absent` for the old source, so `winget configure` uninstalls that source.
+
 ## [1.2.0] - 2026-10-04
 
 ### Added

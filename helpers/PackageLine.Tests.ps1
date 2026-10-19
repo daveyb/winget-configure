@@ -100,6 +100,7 @@ packages:
     - Git.Git # Git version control
   media_entertainment:
     - Spotify.Spotify # Spotify music streaming
+    - Contoso.SourceMove source: winget # same id, old source
 "@
 $current = @"
 packages:
@@ -107,6 +108,7 @@ packages:
     - Git.Git # Git version control
   media_entertainment:
     - 9NCBCSZSJRSB source: msstore # Spotify (Microsoft Store)
+    - Contoso.SourceMove source: msstore # same id, new source
 "@
 if ($current.Contains('Spotify.Spotify'))
 {
@@ -194,7 +196,9 @@ try
     $checks = @(
         @{ Id = '9NCBCSZSJRSB'; Source = 'msstore'; Ensure = 'Present'; Label = 'store present' },
         @{ Id = 'Git.Git'; Source = 'winget'; Ensure = 'Present'; Label = 'git present' },
-        @{ Id = 'Spotify.Spotify'; Source = 'winget'; Ensure = 'Absent'; Label = 'spotify absent' }
+        @{ Id = 'Spotify.Spotify'; Source = 'winget'; Ensure = 'Absent'; Label = 'spotify absent' },
+        @{ Id = 'Contoso.SourceMove'; Source = 'msstore'; Ensure = 'Present'; Label = 'source move present' },
+        @{ Id = 'Contoso.SourceMove'; Source = 'winget'; Ensure = 'Absent'; Label = 'source move old source absent' }
     )
     foreach ($check in $checks)
     {
