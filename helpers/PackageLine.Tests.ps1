@@ -125,10 +125,31 @@ if (Test-Path -LiteralPath $dscPath)
 }
 $packagesBefore = [System.IO.File]::ReadAllBytes($packagesFile)
 
+$gitEnvNames = @(
+    'GIT_DIR',
+    'GIT_WORK_TREE',
+    'GIT_INDEX_FILE',
+    'GIT_PREFIX',
+    'GIT_COMMON_DIR',
+    'GIT_OBJECT_DIRECTORY'
+)
+$savedGitEnv = @{}
+foreach ($name in $gitEnvNames)
+{
+    $envPath = "Env:$name"
+    if (Test-Path -LiteralPath $envPath)
+    {
+        $savedGitEnv[$name] = (Get-Item -LiteralPath $envPath).Value
+        Remove-Item -LiteralPath $envPath
+    }
+}
+
 try
 {
     New-Item -ItemType Directory -Path $fixtureRoot -Force | Out-Null
-    [System.IO.File]::WriteAllText($fixtureYaml, ($previous -replace "`n", "`r`n"), $utf8)
+    $previousText = ($previous -replace "`r`n", "`n" -replace "`r", "`n") -replace "`n", "`r`n"
+    $currentText = ($current -replace "`r`n", "`n" -replace "`r", "`n") -replace "`n", "`r`n"
+    [System.IO.File]::WriteAllText($fixtureYaml, $previousText, $utf8)
     $PSNativeCommandUseErrorActionPreference = $false
     $init = & git -C $fixtureRoot init -b fixture 2>&1
     if ($LASTEXITCODE -ne 0)
@@ -145,26 +166,50 @@ try
     {
         throw ("git commit exited {0}: {1}" -f $LASTEXITCODE, ($commit | Out-String))
     }
-    [System.IO.File]::WriteAllText($fixtureYaml, ($current -replace "`n", "`r`n"), $utf8)
+    $shown = & git -C $fixtureRoot --no-pager show HEAD:winget-packages.yml 2>&1
+    $shownText = $shown | Out-String
+    if ($LASTEXITCODE -ne 0 -or -not $shownText.Contains('Spotify.Spotify'))
+    {
+        throw ("fixture HEAD is missing Spotify.Spotify: {0}" -f $shownText)
+    }
+    [System.IO.File]::WriteAllText($fixtureYaml, $currentText, $utf8)
 
     $generator = Join-Path $repoRoot 'New-WingetConfiguration.ps1'
-    $run = & pwsh -NoProfile -File $generator -PackagesFile $fixtureYaml -OutputFile $outputPath -Force -CompareRef HEAD 2>&1
+    $run = & pwsh -NoProfile -WorkingDirectory $fixtureRoot -File $generator -PackagesFile $fixtureYaml -OutputFile $outputPath -Force -CompareRef HEAD *>&1
     $code = $LASTEXITCODE
+    $runText = $run | Out-String
     if ($code -ne 0)
     {
-        throw ("New-WingetConfiguration.ps1 exited {0}: {1}" -f $code, ($run | Out-String))
+        throw ("New-WingetConfiguration.ps1 exited {0}: {1}" -f $code, $runText)
     }
     if (-not (Test-Path -LiteralPath $outputPath))
     {
         throw "New-WingetConfiguration.ps1 did not write $outputPath"
     }
     $generated = [System.IO.File]::ReadAllText($outputPath)
-    Assert-DscPackage -Yaml $generated -Id '9NCBCSZSJRSB' -Source 'msstore' -Ensure 'Present' -Label 'store present'
-    Assert-DscPackage -Yaml $generated -Id 'Git.Git' -Source 'winget' -Ensure 'Present' -Label 'git present'
-    Assert-DscPackage -Yaml $generated -Id 'Spotify.Spotify' -Source 'winget' -Ensure 'Absent' -Label 'spotify absent'
+    $checks = @(
+        @{ Id = '9NCBCSZSJRSB'; Source = 'msstore'; Ensure = 'Present'; Label = 'store present' },
+        @{ Id = 'Git.Git'; Source = 'winget'; Ensure = 'Present'; Label = 'git present' },
+        @{ Id = 'Spotify.Spotify'; Source = 'winget'; Ensure = 'Absent'; Label = 'spotify absent' }
+    )
+    foreach ($check in $checks)
+    {
+        try
+        {
+            Assert-DscPackage -Yaml $generated -Id $check.Id -Source $check.Source -Ensure $check.Ensure -Label $check.Label
+        } catch
+        {
+            $excerpt = if ($runText.Length -gt 4000) { $runText.Substring(0, 4000) } else { $runText }
+            throw ("{0}`n{1}" -f $_.Exception.Message, $excerpt)
+        }
+    }
 }
 finally
 {
+    foreach ($name in $savedGitEnv.Keys)
+    {
+        Set-Item -LiteralPath "Env:$name" -Value $savedGitEnv[$name]
+    }
     if (Test-Path -LiteralPath $fixtureRoot)
     {
         Remove-Item -LiteralPath $fixtureRoot -Recurse -Force -ErrorAction SilentlyContinue

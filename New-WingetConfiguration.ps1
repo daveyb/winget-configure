@@ -113,6 +113,8 @@ function Get-RelativePath
 
 function Test-GitAvailable
 {
+    $previousPreference = $PSNativeCommandUseErrorActionPreference
+    $PSNativeCommandUseErrorActionPreference = $false
     try
     {
         $null = & git --version 2>$null
@@ -120,6 +122,9 @@ function Test-GitAvailable
     } catch
     {
         return $false
+    } finally
+    {
+        $PSNativeCommandUseErrorActionPreference = $previousPreference
     }
 }
 
@@ -130,15 +135,20 @@ function Get-GitRepoRoot
         [Parameter(Mandatory)][string]$StartDirectory
     )
 
+    $previousPreference = $PSNativeCommandUseErrorActionPreference
+    $PSNativeCommandUseErrorActionPreference = $false
     try
     {
         $root = & git -C $StartDirectory rev-parse --show-toplevel 2>$null
-        if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($root))
+        if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace([string]$root))
         {
-            return $root.Trim()
+            return ([string]$root).Trim()
         }
     } catch
     {
+    } finally
+    {
+        $PSNativeCommandUseErrorActionPreference = $previousPreference
     }
 
     return $null
@@ -157,22 +167,49 @@ function Get-GitFileContentAtRef
     $gitPath = $RepoRelativePath.Replace('\', '/')
     $spec = "${Ref}:${gitPath}"
 
-    $previousEncoding = [Console]::OutputEncoding
+    $previousPreference = $PSNativeCommandUseErrorActionPreference
+    $PSNativeCommandUseErrorActionPreference = $false
+    $previousEncoding = $null
+    $encodingChanged = $false
     try
     {
-        # winget-packages.yml is UTF-8. The console code page splits the category banner.
-        [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false
-        $content = & git -C $RepoRoot show $spec 2>$null
+        try
+        {
+            $previousEncoding = [Console]::OutputEncoding
+            # winget-packages.yml is UTF-8. The console code page splits the category banner.
+            [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false
+            $encodingChanged = $true
+        } catch
+        {
+            Write-Warning "Console encoding was left unchanged. $($_.Exception.Message)"
+        }
+
+        $content = @(& git -C $RepoRoot --no-pager show $spec 2>&1)
+        $errors = @($content | Where-Object { $_ -is [System.Management.Automation.ErrorRecord] })
+        $lines = @($content | Where-Object { $_ -isnot [System.Management.Automation.ErrorRecord] })
         if ($LASTEXITCODE -eq 0)
         {
-            return $content
+            # A bare return enumerates the line array.
+            return ,$lines
         }
+
+        $detail = @($errors + $lines) | Out-String
+        Write-Warning "Git show failed for ${spec}: $detail"
     } catch
     {
         Write-Warning "Git command failed: $($_.Exception.Message)"
     } finally
     {
-        [Console]::OutputEncoding = $previousEncoding
+        $PSNativeCommandUseErrorActionPreference = $previousPreference
+        if ($encodingChanged -and $null -ne $previousEncoding)
+        {
+            try
+            {
+                [Console]::OutputEncoding = $previousEncoding
+            } catch
+            {
+            }
+        }
     }
 
     return $null
