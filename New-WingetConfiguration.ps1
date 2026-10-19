@@ -96,19 +96,31 @@ function Resolve-CanonicalPath
     )
 
     $full = (Resolve-Path -LiteralPath $Path).Path
-    try
+    if (-not ('WingetConfigure.NativePath' -as [type]))
     {
-        # 8.3 short names and git's long path do not share a prefix.
-        $fso = New-Object -ComObject Scripting.FileSystemObject
-        if (Test-Path -LiteralPath $full -PathType Container)
-        {
-            return $fso.GetFolder($full).Path
-        }
-        return $fso.GetFile($full).Path
-    } catch
+        Add-Type -TypeDefinition @'
+using System.Runtime.InteropServices;
+using System.Text;
+namespace WingetConfigure
+{
+    public static class NativePath
     {
-        return $full
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        public static extern uint GetLongPathName(string shortPath, StringBuilder buffer, uint bufferSize);
     }
+}
+'@
+    }
+
+    # 8.3 short names and git's long path do not share a prefix.
+    $buffer = New-Object System.Text.StringBuilder 4096
+    $length = [WingetConfigure.NativePath]::GetLongPathName($full, $buffer, [uint32]$buffer.Capacity)
+    if ($length -gt 0 -and $length -lt $buffer.Capacity)
+    {
+        return $buffer.ToString()
+    }
+
+    return $full
 }
 
 function Get-RelativePath
