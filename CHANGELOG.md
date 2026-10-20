@@ -8,8 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.4.0] - 2026-10-20
 
 ### Changed
-- `OpenCode.Spark` does not resolve an OpenCode version while the helper is parsed. Get and Test read `%LOCALAPPDATA%\opencode-cli\release.json`, or the pinned 1.19.3 x64 release when that file is absent. They do not call GitHub, so a rate limit or a slow API cannot stall `winget configure` or the unit tests, and those scripts cannot observe different versions.
+- `OpenCode.Spark` does not resolve an OpenCode version while the helper is parsed. Get and Test do not call GitHub, so a rate limit or a slow API cannot stall `winget configure` or the unit tests. Get reads `%LOCALAPPDATA%\opencode-cli\release.json`, or the pinned 1.19.3 x64 release when that file is absent.
+- Test returns false when `release.json` is missing, has no `fetched_at`, or is 24 hours old or older. A machine already on 1.19.3, and a machine that converged once, does not stay pinned: Set runs and fetches the current release. A cache newer than 24 hours is compliant only when the launcher, shim, user Path entry, and executable match that cache.
 - Set is the only step that calls the GitHub releases API. It sends a User-Agent, uses the `opencode-windows-x64.zip` asset URL, and requires that asset's SHA-256 digest. The zip hash is checked before extract. A missing asset, a missing digest, a hash mismatch, or a release older than the cached or installed binary fails the resource. It does not fall back to 1.19.3, does not skip the hash, and does not point `opencode-spark` at an older binary. Older version folders are left in place. `Install-Packages.ps1` still warns and continues if that step fails.
+- The launcher resolves `opencode.exe` with `Join-Path $env:LOCALAPPDATA` and the verified version folder when it starts. It does not bake the Set-time absolute profile path.
 
 ## [1.3.0] - 2026-10-20
 

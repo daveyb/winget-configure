@@ -5,11 +5,14 @@
 $ErrorActionPreference = 'Stop'
 
 # Cached x64 zip. The winget ARM64 build cannot start the TUI.
-# Get and Test use this pin, or release.json after Set has verified a release.
-# Do not call GitHub while this file is parsed.
+# Get reads release.json after Set has verified a release, or this pin when
+# that file is absent. Test is false when the cache is missing or older than
+# OpenCodeSparkCacheTtlHours, so Set can fetch the current release.
+# Do not call GitHub while this file is parsed, and do not call it from Get or Test.
 $script:OpenCodeSparkPinnedVersion = '1.19.3'
 $script:OpenCodeSparkPinnedZipUri = 'https://github.com/anomalyco/opencode/releases/download/v1.19.3/opencode-windows-x64.zip'
 $script:OpenCodeSparkPinnedZipSha256 = 'E4CE9117F55FC068414513789F8C7D1049F855D7518BB4E350B9170A3A20D8C3'
+$script:OpenCodeSparkCacheTtlHours = 24
 $script:OpenCodeSparkVersion = $script:OpenCodeSparkPinnedVersion
 $script:OpenCodeSparkZipUri = $script:OpenCodeSparkPinnedZipUri
 $script:OpenCodeSparkZipSha256 = $script:OpenCodeSparkPinnedZipSha256
@@ -150,6 +153,85 @@ function Get-OpenCodeSparkCachePath
     return (Join-Path $env:LOCALAPPDATA 'opencode-cli\release.json')
 }
 
+function Read-OpenCodeSparkCache
+{
+    [CmdletBinding()]
+    param()
+
+    $path = Get-OpenCodeSparkCachePath
+    if ([string]::IsNullOrWhiteSpace($path))
+    {
+        return $null
+    }
+
+    if (-not (Test-Path -LiteralPath $path -PathType Leaf))
+    {
+        return $null
+    }
+
+    try
+    {
+        $cached = [System.IO.File]::ReadAllText($path) | ConvertFrom-Json
+        $version = [string]$cached.version
+        $uri = [string]$cached.uri
+        $sha = [string]$cached.sha256
+        if ($version -notmatch '^\d+\.\d+\.\d+$' -or [string]::IsNullOrWhiteSpace($uri) -or $sha -notmatch '^[A-Fa-f0-9]{64}$')
+        {
+            return $null
+        }
+
+        $fetched = $null
+        $rawFetched = ''
+        $fetchedProperty = $cached.PSObject.Properties['fetched_at']
+        if ($null -ne $fetchedProperty -and -not [string]::IsNullOrWhiteSpace([string]$fetchedProperty.Value))
+        {
+            $rawFetched = [string]$fetchedProperty.Value
+            $parsed = [datetime]::MinValue
+            $styles = [System.Globalization.DateTimeStyles]::RoundtripKind
+            if ([datetime]::TryParse($rawFetched, [System.Globalization.CultureInfo]::InvariantCulture, $styles, [ref]$parsed))
+            {
+                if ($parsed.Kind -eq [System.DateTimeKind]::Unspecified)
+                {
+                    $parsed = [datetime]::SpecifyKind($parsed, [System.DateTimeKind]::Utc)
+                }
+
+                $fetched = $parsed.ToUniversalTime()
+            }
+        }
+
+        return @{
+            Version   = $version
+            Uri       = $uri
+            Sha256    = $sha.ToUpperInvariant()
+            FetchedAt = $fetched
+        }
+    }
+    catch
+    {
+        return $null
+    }
+}
+
+function Test-OpenCodeSparkCacheFresh
+{
+    [CmdletBinding()]
+    param()
+
+    $cached = Read-OpenCodeSparkCache
+    if ($null -eq $cached -or $null -eq $cached.FetchedAt)
+    {
+        return $false
+    }
+
+    $age = [datetime]::UtcNow - $cached.FetchedAt
+    if ($age.TotalHours -lt 0)
+    {
+        return $false
+    }
+
+    return ($age.TotalHours -lt $script:OpenCodeSparkCacheTtlHours)
+}
+
 function Initialize-OpenCodeSparkDesired
 {
     [CmdletBinding()]
@@ -164,28 +246,12 @@ function Initialize-OpenCodeSparkDesired
     $script:OpenCodeSparkZipUri = $script:OpenCodeSparkPinnedZipUri
     $script:OpenCodeSparkZipSha256 = $script:OpenCodeSparkPinnedZipSha256
 
-    $cachePath = Get-OpenCodeSparkCachePath
-    if ($cachePath -and (Test-Path -LiteralPath $cachePath -PathType Leaf))
+    $cached = Read-OpenCodeSparkCache
+    if ($null -ne $cached)
     {
-        try
-        {
-            $cached = [System.IO.File]::ReadAllText($cachePath) | ConvertFrom-Json
-            $version = [string]$cached.version
-            $uri = [string]$cached.uri
-            $sha = [string]$cached.sha256
-            if ($version -match '^\d+\.\d+\.\d+$' -and -not [string]::IsNullOrWhiteSpace($uri) -and $sha -match '^[A-Fa-f0-9]{64}$')
-            {
-                $script:OpenCodeSparkVersion = $version
-                $script:OpenCodeSparkZipUri = $uri
-                $script:OpenCodeSparkZipSha256 = $sha.ToUpperInvariant()
-            }
-        }
-        catch
-        {
-            $script:OpenCodeSparkVersion = $script:OpenCodeSparkPinnedVersion
-            $script:OpenCodeSparkZipUri = $script:OpenCodeSparkPinnedZipUri
-            $script:OpenCodeSparkZipSha256 = $script:OpenCodeSparkPinnedZipSha256
-        }
+        $script:OpenCodeSparkVersion = $cached.Version
+        $script:OpenCodeSparkZipUri = $cached.Uri
+        $script:OpenCodeSparkZipSha256 = $cached.Sha256
     }
 
     $script:OpenCodeSparkDesiredReady = $true
@@ -234,9 +300,10 @@ function Write-OpenCodeSparkCache
     }
 
     $payload = @{
-        version = $script:OpenCodeSparkVersion
-        uri     = $script:OpenCodeSparkZipUri
-        sha256  = $script:OpenCodeSparkZipSha256
+        version    = $script:OpenCodeSparkVersion
+        uri        = $script:OpenCodeSparkZipUri
+        sha256     = $script:OpenCodeSparkZipSha256
+        fetched_at = [datetime]::UtcNow.ToString('o')
     } | ConvertTo-Json -Compress
 
     $encoding = New-Object System.Text.UTF8Encoding $false
@@ -371,7 +438,8 @@ function Invoke-OpenCodeSpark {
 
     # The winget ARM64 build cannot start the TUI. bun:ffi is disabled there.
     # The x64 build runs under emulation and the TUI comes up.
-    $opencode = '__OPENCODE_SPARK_EXECUTABLE__'
+    # Join LOCALAPPDATA at start so a moved profile is not stuck on the Set-time path.
+    $opencode = Join-Path $env:LOCALAPPDATA 'opencode-cli\__OPENCODE_SPARK_VERSION__-x64\opencode.exe'
     if (-not (Test-Path $opencode)) {
         throw 'opencode x64 build is not installed'
     }
@@ -400,7 +468,7 @@ if ($MyInvocation.InvocationName -ne '.') {
 '@
 
     Initialize-OpenCodeSparkDesired
-    $text = $text.Replace('__OPENCODE_SPARK_EXECUTABLE__', (Get-OpenCodeSparkExecutablePath))
+    $text = $text.Replace('__OPENCODE_SPARK_VERSION__', $script:OpenCodeSparkVersion)
 
     return ((ConvertTo-OpenCodeSparkText $text) + "`n")
 }
@@ -684,6 +752,13 @@ function Test-OpenCodeSpark
 
     try
     {
+        # DSC skips Set when this is true. A missing or stale cache must fail
+        # here so Set fetches the current verified release. Do not call GitHub.
+        if (-not (Test-OpenCodeSparkCacheFresh))
+        {
+            return $false
+        }
+
         $facts = Get-OpenCodeSparkFacts
         return [bool]($facts.Launcher -and $facts.Shim -and $facts.Path -and $facts.Executable)
     }
