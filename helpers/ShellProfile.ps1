@@ -31,33 +31,45 @@ $script:ShellProfileRelaunchTemp = $null
 $commandInfo = $MyInvocation.MyCommand
 if ($null -ne $commandInfo)
 {
-    $pathProperty = $commandInfo.PSObject.Properties['Path']
-    if ($null -ne $pathProperty -and -not [string]::IsNullOrWhiteSpace([string]$pathProperty.Value))
+    try
     {
-        $script:ShellProfileFile = [string]$pathProperty.Value
+        $props = $commandInfo.PSObject.Properties
+    }
+    catch
+    {
+        $props = $null
     }
 
-    $definitionProperty = $commandInfo.PSObject.Properties['Definition']
-    if ($null -ne $definitionProperty)
+    if ($null -ne $props)
     {
-        $definitionText = [string]$definitionProperty.Value
-        if ($definitionText -match 'function Invoke-ShellProfileOnPwsh')
+        $pathProperty = $props['Path']
+        if ($null -ne $pathProperty -and -not [string]::IsNullOrWhiteSpace([string]$pathProperty.Value))
         {
-            $script:ShellProfileDefinition = $definitionText
+            $script:ShellProfileFile = [string]$pathProperty.Value
         }
-    }
 
-    # Some script-block hosts expose the text on ScriptBlock rather than
-    # Definition. Either one is enough to write a file and relaunch.
-    if ([string]::IsNullOrWhiteSpace($script:ShellProfileDefinition))
-    {
-        $scriptBlockProperty = $commandInfo.PSObject.Properties['ScriptBlock']
-        if ($null -ne $scriptBlockProperty -and $null -ne $scriptBlockProperty.Value)
+        $definitionProperty = $props['Definition']
+        if ($null -ne $definitionProperty)
         {
-            $scriptBlockText = $scriptBlockProperty.Value.ToString()
-            if ($scriptBlockText -match 'function Invoke-ShellProfileOnPwsh')
+            $definitionText = [string]$definitionProperty.Value
+            if ($definitionText -match 'function Invoke-ShellProfileOnPwsh')
             {
-                $script:ShellProfileDefinition = $scriptBlockText
+                $script:ShellProfileDefinition = $definitionText
+            }
+        }
+
+        # Some script-block hosts expose the text on ScriptBlock rather than
+        # Definition. Either one is enough to write a file and relaunch.
+        if ([string]::IsNullOrWhiteSpace($script:ShellProfileDefinition))
+        {
+            $scriptBlockProperty = $props['ScriptBlock']
+            if ($null -ne $scriptBlockProperty -and $null -ne $scriptBlockProperty.Value)
+            {
+                $scriptBlockText = $scriptBlockProperty.Value.ToString()
+                if ($scriptBlockText -match 'function Invoke-ShellProfileOnPwsh')
+                {
+                    $script:ShellProfileDefinition = $scriptBlockText
+                }
             }
         }
     }
