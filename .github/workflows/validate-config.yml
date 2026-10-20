@@ -10,6 +10,9 @@ on:
       - 'helpers/ShellProfile.ps1'
       - 'helpers/ShellProfile.psm1'
       - 'helpers/ShellProfile.Tests.ps1'
+      - 'helpers/OpenCodeSpark.ps1'
+      - 'helpers/OpenCodeSpark.psm1'
+      - 'helpers/OpenCodeSpark.Tests.ps1'
       - 'helpers/PackageLine.ps1'
       - 'helpers/PackageLine.Tests.ps1'
       - 'Install-Packages.ps1'
@@ -33,6 +36,11 @@ jobs:
         shell: pwsh
         run: |
           .\helpers\ShellProfile.Tests.ps1
+
+      - name: Test opencode spark arguments
+        shell: pwsh
+        run: |
+          .\helpers\OpenCodeSpark.Tests.ps1
 
       - name: Test package line parser
         shell: pwsh

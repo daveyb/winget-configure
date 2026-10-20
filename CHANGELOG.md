@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-10-20
+
+### Added
+- `OpenCode.Spark` writes `opencode-spark.ps1` and `opencode-spark.cmd` to the user `~\.local\bin` directory and adds that directory to the user Path. `opencode-spark` reads the LiteLLM master key from Proton Pass when it starts. Opening the TUI, and `opencode-spark run`, pass `--auto`. Permissions that are not explicitly denied are approved. Pass `--no-auto` to confirm those prompts. Other OpenCode subcommands are unchanged.
+
 ## [1.2.3] - 2026-10-20
 
 ### Changed

@@ -448,6 +448,10 @@ $SHELL_PACKAGE_IDS = @(
     'JanDeDobbeleer.OhMyPosh'
 )
 
+# OpenCode.Spark names this package in dependsOn. The WinGetPackage resource
+# gets an id only for that reference. Other packages stay unnamed.
+$OPENCODE_SPARK_PACKAGE_ID = 'Proton.ProtonPass.CLI'
+
 function Add-YamlBlockScalar
 {
     [CmdletBinding()]
@@ -630,6 +634,17 @@ function Get-ShellProfileLibrary
     return (Get-Content -LiteralPath $path -Raw).TrimEnd()
 }
 
+function Get-OpenCodeSparkLibrary
+{
+    $path = Join-Path $PSScriptRoot 'helpers\OpenCodeSpark.ps1'
+    if (-not (Test-Path -LiteralPath $path))
+    {
+        throw "OpenCode spark script not found: $path"
+    }
+
+    return (Get-Content -LiteralPath $path -Raw).TrimEnd()
+}
+
 function Get-EmbeddedScript
 {
     [CmdletBinding()]
@@ -756,7 +771,8 @@ function Build-DscYaml
             $null = $sb.AppendLine('      dependsOn:')
             $null = $sb.AppendLine('        - Microsoft.WSL.Unpin')
         }
-        if ($ensure -eq 'Present' -and $SHELL_PACKAGE_IDS -contains $entry.Id)
+        $namedForDependsOn = ($SHELL_PACKAGE_IDS -contains $entry.Id) -or ($entry.Id -eq $OPENCODE_SPARK_PACKAGE_ID)
+        if ($ensure -eq 'Present' -and $namedForDependsOn)
         {
             $null = $sb.AppendLine("      id: $($entry.Id)")
         }
@@ -791,6 +807,31 @@ function Build-DscYaml
         -GetScript (Get-EmbeddedScript -Library $shellLibrary -Invocation 'return (Get-ShellProfileReport)') `
         -TestScript (Get-EmbeddedScript -Library $shellLibrary -Invocation 'return (Test-ShellProfile)') `
         -SetScript (Get-EmbeddedScript -Library $shellLibrary -Invocation 'Set-ShellProfile')
+
+    $openCodeDependsOn = @()
+    foreach ($packageEntry in $Entries)
+    {
+        $packageEnsure = 'Present'
+        if ($packageEntry.Ensure -and ($packageEntry.Ensure.Trim() -ne ''))
+        {
+            $packageEnsure = $packageEntry.Ensure
+        }
+        if (($packageEntry.Id -eq $OPENCODE_SPARK_PACKAGE_ID) -and ($packageEnsure -ne 'Absent'))
+        {
+            $openCodeDependsOn = @($OPENCODE_SPARK_PACKAGE_ID)
+        }
+    }
+
+    $openCodeLibrary = Get-OpenCodeSparkLibrary
+    $null = $sb.AppendLine('')
+    $null = $sb.AppendLine('    # -- OpenCode spark ----------------------------------------------------------------')
+    Add-WslScriptResource -Builder $sb `
+        -ResourceId 'OpenCode.Spark' `
+        -DependsOn $openCodeDependsOn `
+        -Description 'Write opencode-spark so the TUI and run pass --auto' `
+        -GetScript (Get-EmbeddedScript -Library $openCodeLibrary -Invocation 'return (Get-OpenCodeSparkReport)') `
+        -TestScript (Get-EmbeddedScript -Library $openCodeLibrary -Invocation 'return (Test-OpenCodeSpark)') `
+        -SetScript (Get-EmbeddedScript -Library $openCodeLibrary -Invocation 'Set-OpenCodeSpark')
 
     return $sb.ToString()
 }
