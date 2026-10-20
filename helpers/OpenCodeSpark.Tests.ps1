@@ -86,6 +86,9 @@ Assert-True (-not $beforeFunctions.Contains('Invoke-RestMethod')) 'parse does no
 Assert-True (-not $helperText.Contains('TrimStart')) 'tag strip is not TrimStart'
 Assert-True (-not $helperText.Contains("eq 'latest'")) 'dead latest branch is gone'
 Assert-True (-not $helperText.Contains('Fallback to a known good version')) 'silent 1.19.3 fallback is gone'
+Assert-True (-not $helperText.Contains('digest is not the in-repo pin')) 'pin equality is not an install gate'
+Assert-True (-not $helperText.Contains('Test-OpenCodeSparkReleaseInstallable')) 'pin install gate is gone'
+Assert-True (-not $helperText.Contains('Get-OpenCodeSparkNewestInstalledVersion')) 'a leftover folder is not an installed floor'
 Assert-True ($helperText.Contains('Test-OpenCodeSparkCacheFresh')) 'Test consults cache freshness'
 Assert-True ($helperText.Contains('Join-Path $env:LOCALAPPDATA')) 'launcher template uses the runtime profile'
 Assert-Equal $script:OpenCodeSparkCacheTtlHours 24 'cache TTL is 24 hours'
@@ -153,17 +156,37 @@ Assert-True (-not $helperText.Contains('Invoke-WebRequest')) 'asset download doe
 
 $savedLocalAppData = $env:LOCALAPPDATA
 $installRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('opencode-spark-installed-' + [guid]::NewGuid().ToString('n'))
-$installedDir = Join-Path (Join-Path $installRoot 'opencode-cli') '1.20.0-x64'
-New-Item -ItemType Directory -Path $installedDir -Force | Out-Null
-New-Item -ItemType File -Path (Join-Path $installedDir 'opencode.exe') -Force | Out-Null
+$savedCachePath = $script:OpenCodeSparkCachePath
+$higherDir = Join-Path (Join-Path $installRoot 'opencode-cli') '1.20.0-x64'
+New-Item -ItemType Directory -Path $higherDir -Force | Out-Null
+New-Item -ItemType File -Path (Join-Path $higherDir 'opencode.exe') -Force | Out-Null
+$script:OpenCodeSparkCachePath = Join-Path $installRoot 'missing-release.json'
 $env:LOCALAPPDATA = $installRoot
 try
 {
-    Assert-Equal (Get-OpenCodeSparkNewestInstalledVersion) '1.20.0' 'installed version scan sees the newest exe'
+    Assert-Equal (Get-OpenCodeSparkSelectedInstalledVersion) $null 'a leftover higher folder is not the selected version'
+    $pinDir = Join-Path (Join-Path $installRoot 'opencode-cli') '1.19.3-x64'
+    New-Item -ItemType Directory -Path $pinDir -Force | Out-Null
+    New-Item -ItemType File -Path (Join-Path $pinDir 'opencode.exe') -Force | Out-Null
+    Assert-Equal (Get-OpenCodeSparkSelectedInstalledVersion) '1.19.3' 'selected pin is the floor when the cache is absent'
+    $strayDir = Join-Path (Join-Path $installRoot 'opencode-cli') '1.21.0-x64'
+    New-Item -ItemType Directory -Path $strayDir -Force | Out-Null
+    New-Item -ItemType File -Path (Join-Path $strayDir 'opencode.exe') -Force | Out-Null
+    $script:OpenCodeSparkCachePath = Join-Path (Join-Path $installRoot 'opencode-cli') 'release.json'
+    $selectedRecord = @{
+        version    = '1.20.0'
+        uri        = 'https://github.com/anomalyco/opencode/releases/download/v1.20.0/opencode-windows-x64.zip'
+        sha256     = 'B' * 64
+        fetched_at = [datetime]::UtcNow.ToString('o')
+    }
+    $selectedEncoding = New-Object System.Text.UTF8Encoding $false
+    [System.IO.File]::WriteAllText($script:OpenCodeSparkCachePath, ($selectedRecord | ConvertTo-Json -Compress), $selectedEncoding)
+    Assert-Equal (Get-OpenCodeSparkSelectedInstalledVersion) '1.20.0' 'selected cache version ignores a leftover higher folder'
 }
 finally
 {
     $env:LOCALAPPDATA = $savedLocalAppData
+    $script:OpenCodeSparkCachePath = $savedCachePath
     Remove-Item -LiteralPath $installRoot -Recurse -Force -ErrorAction SilentlyContinue
 }
 
@@ -251,10 +274,9 @@ try
     $treeEncoding = New-Object System.Text.UTF8Encoding $false
     [System.IO.File]::WriteAllText($script:OpenCodeSparkCachePath, ($treeRecord | ConvertTo-Json -Compress), $treeEncoding)
     Assert-True (Test-OpenCodeSparkInstalledRelease -Version '1.19.3' -Sha256 $pinSha) 'stale cache still matches the installed tree'
-    Assert-True (Test-OpenCodeSparkReleaseInstallable -Version '1.19.3' -Sha256 $pinSha) 'matching installed tree is not replaced'
     Assert-True (-not (Test-OpenCodeSparkInstalledRelease -Version '1.19.3' -Sha256 ('B' * 64))) 'installed tree rejects a different digest'
-    Assert-True (-not (Test-OpenCodeSparkReleaseInstallable -Version '1.20.0' -Sha256 ('B' * 64))) 'unpinned digest is not installable'
-    Assert-True (Test-OpenCodeSparkReleaseInstallable -Version '1.20.0' -Sha256 $pinSha) 'pin digest remains the install authorization'
+    Set-OpenCodeSparkRelease -Version '1.20.0' -Uri 'https://github.com/anomalyco/opencode/releases/download/v1.20.0/opencode-windows-x64.zip' -Sha256 ('B' * 64)
+    Assert-Equal $script:OpenCodeSparkZipSha256 ('B' * 64) 'API digest is the install authorization'
 }
 finally
 {

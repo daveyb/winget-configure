@@ -9,8 +9,10 @@ $ErrorActionPreference = 'Stop'
 # that file is absent. Test is false when the cache is missing or older than
 # OpenCodeSparkCacheTtlHours, so Set runs. Set refreshes fetched_at and does
 # not replace opencode.exe when the resolved version and digest already match
-# the installed tree. The GitHub API digest does not authorize a release that
-# is not this pin. Asset downloads are limited to GitHub hosts.
+# the installed tree. Set installs when the asset host is allowlisted and the
+# zip hash matches the API digest. The pin does not block a later release.
+# A leftover higher version folder is not a downgrade floor. Asset downloads
+# are limited to GitHub hosts.
 # Do not call GitHub while this file is parsed, and do not call it from Get or Test.
 $script:OpenCodeSparkPinnedVersion = '1.19.3'
 $script:OpenCodeSparkPinnedZipUri = 'https://github.com/anomalyco/opencode/releases/download/v1.19.3/opencode-windows-x64.zip'
@@ -364,7 +366,7 @@ function Write-OpenCodeSparkCache
     [System.IO.File]::WriteAllText($path, $payload, $encoding)
 }
 
-function Get-OpenCodeSparkNewestInstalledVersion
+function Get-OpenCodeSparkSelectedInstalledVersion
 {
     [CmdletBinding()]
     param()
@@ -374,34 +376,20 @@ function Get-OpenCodeSparkNewestInstalledVersion
         return $null
     }
 
-    $base = Join-Path $env:LOCALAPPDATA 'opencode-cli'
-    if (-not (Test-Path -LiteralPath $base -PathType Container))
+    $cached = Read-OpenCodeSparkCache
+    $version = $script:OpenCodeSparkPinnedVersion
+    if ($null -ne $cached)
+    {
+        $version = $cached.Version
+    }
+
+    $exe = Join-Path (Join-Path (Join-Path $env:LOCALAPPDATA 'opencode-cli') ($version + '-x64')) 'opencode.exe'
+    if (-not (Test-Path -LiteralPath $exe -PathType Leaf))
     {
         return $null
     }
 
-    $newest = $null
-    foreach ($dir in @(Get-ChildItem -LiteralPath $base -Directory -ErrorAction SilentlyContinue))
-    {
-        if ($dir.Name -notmatch '^(\d+\.\d+\.\d+)-x64$')
-        {
-            continue
-        }
-
-        $version = $Matches[1]
-        $exe = Join-Path $dir.FullName 'opencode.exe'
-        if (-not (Test-Path -LiteralPath $exe -PathType Leaf))
-        {
-            continue
-        }
-
-        if ($null -eq $newest -or (Compare-OpenCodeSparkVersion -Left $version -Right $newest) -gt 0)
-        {
-            $newest = $version
-        }
-    }
-
-    return $newest
+    return $version
 }
 
 function Resolve-OpenCodeSparkRelease
@@ -953,22 +941,6 @@ function Test-OpenCodeSparkInstalledRelease
     return (Test-OpenCodeSparkHashEqual -Actual $cached.Sha256 -Expected $Sha256)
 }
 
-function Test-OpenCodeSparkReleaseInstallable
-{
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory)][string]$Version,
-        [Parameter(Mandatory)][string]$Sha256
-    )
-
-    if (Test-OpenCodeSparkInstalledRelease -Version $Version -Sha256 $Sha256)
-    {
-        return $true
-    }
-
-    return (Test-OpenCodeSparkHashEqual -Actual $Sha256 -Expected $script:OpenCodeSparkPinnedZipSha256)
-}
-
 function Set-OpenCodeSpark
 {
     [CmdletBinding()]
@@ -982,7 +954,7 @@ function Set-OpenCodeSpark
         throw "OpenCode release $($release.Version) is older than cached $cachedVersion"
     }
 
-    $installed = Get-OpenCodeSparkNewestInstalledVersion
+    $installed = Get-OpenCodeSparkSelectedInstalledVersion
     if ($installed -and (Compare-OpenCodeSparkVersion -Left $release.Version -Right $installed) -lt 0)
     {
         throw "OpenCode release $($release.Version) is older than installed $installed"
@@ -994,11 +966,6 @@ function Set-OpenCodeSpark
     }
 
     $treeMatch = Test-OpenCodeSparkInstalledRelease -Version $release.Version -Sha256 $release.Sha256
-    if (-not (Test-OpenCodeSparkReleaseInstallable -Version $release.Version -Sha256 $release.Sha256))
-    {
-        throw "OpenCode release $($release.Version) digest is not the in-repo pin"
-    }
-
     Set-OpenCodeSparkRelease -Version $release.Version -Uri $release.Uri -Sha256 $release.Sha256
     if (-not $treeMatch)
     {
