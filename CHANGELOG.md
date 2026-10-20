@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.3] - 2026-10-20
+
+### Changed
+- Hermes Desktop installs from the Microsoft Store package `9PMXK8CZC7KR`, published by Nous Research.
+- The generated configuration drops the `Docker.DockerDesktop` Absent tombstone. That package left the list in 1.2.2, and this is the following generation.
+
 ## [1.2.2] - 2026-10-19
 
 ### Changed
