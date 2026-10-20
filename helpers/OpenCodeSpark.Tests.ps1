@@ -58,13 +58,112 @@ finally
     Remove-Item -LiteralPath $launcherPath -Force -ErrorAction SilentlyContinue
 }
 
-$executableSuffix = "opencode-cli\$script:OpenCodeSparkVersion-x64\opencode.exe"
-Assert-True ((Get-OpenCodeSparkExecutablePath).EndsWith($executableSuffix)) 'executable path uses the resolved folder'
+$script:OpenCodeSparkCachePath = Join-Path ([System.IO.Path]::GetTempPath()) ('opencode-spark-missing-' + [guid]::NewGuid().ToString('n') + '.json')
+$script:OpenCodeSparkDesiredReady = $false
+$separator = [System.IO.Path]::DirectorySeparatorChar
+$executableSuffix = "opencode-cli$separator$script:OpenCodeSparkVersion-x64$separator" + 'opencode.exe'
+Assert-True ((Get-OpenCodeSparkExecutablePath).EndsWith($executableSuffix)) 'executable path uses the cached or pinned folder'
 Assert-True ((Get-OpenCodeSparkLauncherText).Contains($executableSuffix)) 'launcher starts that same executable'
+Assert-True ((Get-OpenCodeSparkLauncherText).Contains('__OPENCODE_SPARK_EXECUTABLE__') -eq $false) 'launcher path is not a leftover placeholder'
 Assert-True (Test-OpenCodeSparkHashEqual -Actual 'e4ce9117f55fc068414513789f8c7d1049f855d7518bb4e350b9170a3a20d8c3' -Expected 'E4CE9117F55FC068414513789F8C7D1049F855D7518BB4E350B9170A3A20D8C3') 'zip hash compare ignores case'
 Assert-True (-not (Test-OpenCodeSparkHashEqual -Actual '0000000000000000000000000000000000000000000000000000000000000000' -Expected 'E4CE9117F55FC068414513789F8C7D1049F855D7518BB4E350B9170A3A20D8C3')) 'zip hash compare rejects a different hash'
 Assert-True (Test-OpenCodeSparkVersionOutput "$script:OpenCodeSparkVersion`r`n") 'version output accepts resolved version'
 Assert-True (-not (Test-OpenCodeSparkVersionOutput '1.19.1')) 'version output rejects 1.19.1'
+
+Assert-Equal $script:OpenCodeSparkVersion $script:OpenCodeSparkPinnedVersion 'dot-source keeps the pinned version'
+Assert-Equal $script:OpenCodeSparkZipSha256 $script:OpenCodeSparkPinnedZipSha256 'dot-source keeps the pinned digest'
+$helperText = [System.IO.File]::ReadAllText($helper)
+$beforeFunctions = $helperText.Substring(0, $helperText.IndexOf('function '))
+Assert-True (-not $beforeFunctions.Contains('Invoke-RestMethod')) 'parse does not call GitHub'
+Assert-True (-not $helperText.Contains('TrimStart')) 'tag strip is not TrimStart'
+Assert-True (-not $helperText.Contains("eq 'latest'")) 'dead latest branch is gone'
+Assert-True (-not $helperText.Contains('Fallback to a known good version')) 'silent 1.19.3 fallback is gone'
+$headers = Get-OpenCodeSparkGitHubHeaders
+Assert-True (-not [string]::IsNullOrWhiteSpace([string]$headers['User-Agent'])) 'GitHub request sends a User-Agent'
+Assert-Equal (Compare-OpenCodeSparkVersion -Left '1.19.3' -Right '1.20.0') -1 'older version compares low'
+Assert-Equal (Compare-OpenCodeSparkVersion -Left '1.20.0' -Right '1.19.3') 1 'newer version compares high'
+Assert-Equal (Compare-OpenCodeSparkVersion -Left '1.19.3' -Right '1.19.3') 0 'same version compares equal'
+
+function New-OpenCodeSparkReleaseFixture
+{
+    param(
+        [string]$Tag,
+        [string]$Url,
+        [string]$Digest,
+        [string]$Name = 'opencode-windows-x64.zip'
+    )
+
+    return [pscustomobject]@{
+        tag_name = $Tag
+        assets   = @(
+            [pscustomobject]@{
+                name                 = $Name
+                browser_download_url = $Url
+                digest               = $Digest
+            }
+        )
+    }
+}
+
+function Assert-OpenCodeSparkThrows
+{
+    param([scriptblock]$Script, [string]$Label)
+
+    $threw = $false
+    try
+    {
+        & $Script | Out-Null
+    }
+    catch
+    {
+        $threw = $true
+    }
+
+    Assert-True $threw $Label
+}
+
+$resolved = ConvertTo-OpenCodeSparkRelease -Release (New-OpenCodeSparkReleaseFixture -Tag 'v1.20.0' -Url 'https://example.test/opencode-windows-x64.zip' -Digest 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
+Assert-Equal $resolved.Version '1.20.0' 'release version strips one leading v'
+Assert-Equal $resolved.Uri 'https://example.test/opencode-windows-x64.zip' 'release uses the asset URL'
+Assert-Equal $resolved.Sha256 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' 'release keeps the asset digest'
+Assert-OpenCodeSparkThrows { ConvertTo-OpenCodeSparkRelease -Release (New-OpenCodeSparkReleaseFixture -Tag 'vv1.19.3' -Url 'https://example.test/opencode-windows-x64.zip' -Digest 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') } 'TrimStart tag vv1.19.3 is rejected'
+Assert-OpenCodeSparkThrows { ConvertTo-OpenCodeSparkRelease -Release (New-OpenCodeSparkReleaseFixture -Tag 'version-1.2.3' -Url 'https://example.test/opencode-windows-x64.zip' -Digest 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') } 'TrimStart tag version-1.2.3 is rejected'
+Assert-OpenCodeSparkThrows { ConvertTo-OpenCodeSparkRelease -Release (New-OpenCodeSparkReleaseFixture -Tag 'v1.20.0' -Url 'https://example.test/opencode-windows-x64.zip' -Digest 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' -Name 'opencode-windows-arm64.zip') } 'missing x64 asset is rejected'
+Assert-OpenCodeSparkThrows { ConvertTo-OpenCodeSparkRelease -Release (New-OpenCodeSparkReleaseFixture -Tag 'v1.20.0' -Url 'https://example.test/opencode-windows-x64.zip' -Digest '') } 'missing digest is rejected'
+Assert-OpenCodeSparkThrows { Set-OpenCodeSparkRelease -Version '1.20.0' -Uri 'https://example.test/opencode-windows-x64.zip' -Sha256 '   ' } 'empty hash is not confirmed'
+
+$savedLocalAppData = $env:LOCALAPPDATA
+$installRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('opencode-spark-installed-' + [guid]::NewGuid().ToString('n'))
+$installedDir = Join-Path (Join-Path $installRoot 'opencode-cli') '1.20.0-x64'
+New-Item -ItemType Directory -Path $installedDir -Force | Out-Null
+New-Item -ItemType File -Path (Join-Path $installedDir 'opencode.exe') -Force | Out-Null
+$env:LOCALAPPDATA = $installRoot
+try
+{
+    Assert-Equal (Get-OpenCodeSparkNewestInstalledVersion) '1.20.0' 'installed version scan sees the newest exe'
+}
+finally
+{
+    $env:LOCALAPPDATA = $savedLocalAppData
+    Remove-Item -LiteralPath $installRoot -Recurse -Force -ErrorAction SilentlyContinue
+}
+
+$cacheRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('opencode-spark-cache-' + [guid]::NewGuid().ToString('n'))
+New-Item -ItemType Directory -Path $cacheRoot -Force | Out-Null
+$script:OpenCodeSparkCachePath = Join-Path $cacheRoot 'release.json'
+Set-OpenCodeSparkRelease -Version '1.20.0' -Uri 'https://example.test/opencode-windows-x64.zip' -Sha256 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
+Write-OpenCodeSparkCache
+$script:OpenCodeSparkDesiredReady = $false
+$script:OpenCodeSparkVersion = '1.19.3'
+Initialize-OpenCodeSparkDesired
+Assert-Equal $script:OpenCodeSparkVersion '1.20.0' 'cache restores the verified release'
+Assert-Equal $script:OpenCodeSparkZipSha256 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' 'cache restores the verified digest'
+$cachedSuffix = "opencode-cli$separator" + '1.20.0-x64' + $separator + 'opencode.exe'
+Assert-True ((Get-OpenCodeSparkLauncherText).Contains($cachedSuffix)) 'launcher path is built from the cached version'
+Remove-Item -LiteralPath $cacheRoot -Recurse -Force -ErrorAction SilentlyContinue
+$script:OpenCodeSparkCachePath = Join-Path ([System.IO.Path]::GetTempPath()) ('opencode-spark-missing-' + [guid]::NewGuid().ToString('n') + '.json')
+$script:OpenCodeSparkDesiredReady = $false
+Initialize-OpenCodeSparkDesired
 
 Set-StrictMode -Version Latest
 $helperText = [System.IO.File]::ReadAllText($helper)

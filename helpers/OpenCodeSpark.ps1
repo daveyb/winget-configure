@@ -4,24 +4,294 @@
 
 $ErrorActionPreference = 'Stop'
 
-# Pinned x64 zip. The winget ARM64 build cannot start the TUI.
-$script:OpenCodeSparkVersion = 'latest'
-$script:OpenCodeSparkZipSha256 = ''
+# Cached x64 zip. The winget ARM64 build cannot start the TUI.
+# Get and Test use this pin, or release.json after Set has verified a release.
+# Do not call GitHub while this file is parsed.
+$script:OpenCodeSparkPinnedVersion = '1.19.3'
+$script:OpenCodeSparkPinnedZipUri = 'https://github.com/anomalyco/opencode/releases/download/v1.19.3/opencode-windows-x64.zip'
+$script:OpenCodeSparkPinnedZipSha256 = 'E4CE9117F55FC068414513789F8C7D1049F855D7518BB4E350B9170A3A20D8C3'
+$script:OpenCodeSparkVersion = $script:OpenCodeSparkPinnedVersion
+$script:OpenCodeSparkZipUri = $script:OpenCodeSparkPinnedZipUri
+$script:OpenCodeSparkZipSha256 = $script:OpenCodeSparkPinnedZipSha256
+$script:OpenCodeSparkDesiredReady = $false
+$script:OpenCodeSparkCachePath = $null
+$script:OpenCodeSparkAssetName = 'opencode-windows-x64.zip'
 
-# Resolve latest version from GitHub releases if requested
-if ($script:OpenCodeSparkVersion -eq 'latest') {
-    try {
-        $release = Invoke-RestMethod -Uri 'https://api.github.com/repos/anomalyco/opencode/releases/latest' -TimeoutSec 10 -ErrorAction Stop
-        $script:OpenCodeSparkVersion = $release.tag_name.TrimStart('v')
-        $script:OpenCodeSparkZipUri = "https://github.com/anomalyco/opencode/releases/download/v$script:OpenCodeSparkVersion/opencode-windows-x64.zip"
-    } catch {
-        # Fallback to a known good version if network is unavailable
-        $script:OpenCodeSparkVersion = '1.19.3'
-        $script:OpenCodeSparkZipUri = 'https://github.com/anomalyco/opencode/releases/download/v1.19.3/opencode-windows-x64.zip'
-        $script:OpenCodeSparkZipSha256 = 'E4CE9117F55FC068414513789F8C7D1049F855D7518BB4E350B9170A3A20D8C3'
+function Get-OpenCodeSparkGitHubHeaders
+{
+    [CmdletBinding()]
+    param()
+
+    return @{
+        'User-Agent'           = 'winget-configure'
+        'Accept'               = 'application/vnd.github+json'
+        'X-GitHub-Api-Version' = '2022-11-28'
     }
-} else {
-    $script:OpenCodeSparkZipUri = "https://github.com/anomalyco/opencode/releases/download/v$script:OpenCodeSparkVersion/opencode-windows-x64.zip"
+}
+
+function Compare-OpenCodeSparkVersion
+{
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$Left,
+        [Parameter(Mandatory)][string]$Right
+    )
+
+    $leftParts = $Left.Split('.')
+    $rightParts = $Right.Split('.')
+    if ($leftParts.Count -ne 3 -or $rightParts.Count -ne 3)
+    {
+        throw "OpenCode version was not a three-part number: $Left $Right"
+    }
+
+    for ($i = 0; $i -lt 3; $i++)
+    {
+        $leftNumber = 0
+        $rightNumber = 0
+        if (-not [int]::TryParse($leftParts[$i], [ref]$leftNumber) -or -not [int]::TryParse($rightParts[$i], [ref]$rightNumber))
+        {
+            throw "OpenCode version was not a three-part number: $Left $Right"
+        }
+
+        if ($leftNumber -lt $rightNumber)
+        {
+            return -1
+        }
+
+        if ($leftNumber -gt $rightNumber)
+        {
+            return 1
+        }
+    }
+
+    return 0
+}
+
+function ConvertTo-OpenCodeSparkRelease
+{
+    [CmdletBinding()]
+    param($Release)
+
+    if ($null -eq $Release)
+    {
+        throw 'OpenCode release was not returned'
+    }
+
+    $tag = [string]$Release.tag_name
+    $version = $null
+    if ($tag -match '^v(\d+\.\d+\.\d+)$')
+    {
+        $version = $Matches[1]
+    }
+    else
+    {
+        throw "OpenCode release tag was $tag"
+    }
+
+    $asset = $null
+    foreach ($item in @($Release.assets))
+    {
+        if ($null -eq $item)
+        {
+            continue
+        }
+
+        if ([string]$item.name -eq $script:OpenCodeSparkAssetName)
+        {
+            $asset = $item
+            break
+        }
+    }
+
+    if ($null -eq $asset)
+    {
+        throw "OpenCode release has no $($script:OpenCodeSparkAssetName) asset"
+    }
+
+    $uri = [string]$asset.browser_download_url
+    if ([string]::IsNullOrWhiteSpace($uri))
+    {
+        throw 'OpenCode asset URL was empty'
+    }
+
+    $digest = [string]$asset.digest
+    $sha256 = $null
+    if ($digest -match '^sha256:([A-Fa-f0-9]{64})$')
+    {
+        $sha256 = $Matches[1]
+    }
+    else
+    {
+        throw 'OpenCode asset digest was missing'
+    }
+
+    return @{
+        Version = $version
+        Uri     = $uri
+        Sha256  = $sha256
+    }
+}
+
+function Get-OpenCodeSparkCachePath
+{
+    [CmdletBinding()]
+    param()
+
+    if (-not [string]::IsNullOrWhiteSpace($script:OpenCodeSparkCachePath))
+    {
+        return $script:OpenCodeSparkCachePath
+    }
+
+    if ([string]::IsNullOrWhiteSpace($env:LOCALAPPDATA))
+    {
+        return $null
+    }
+
+    return (Join-Path $env:LOCALAPPDATA 'opencode-cli\release.json')
+}
+
+function Initialize-OpenCodeSparkDesired
+{
+    [CmdletBinding()]
+    param()
+
+    if ($script:OpenCodeSparkDesiredReady)
+    {
+        return
+    }
+
+    $script:OpenCodeSparkVersion = $script:OpenCodeSparkPinnedVersion
+    $script:OpenCodeSparkZipUri = $script:OpenCodeSparkPinnedZipUri
+    $script:OpenCodeSparkZipSha256 = $script:OpenCodeSparkPinnedZipSha256
+
+    $cachePath = Get-OpenCodeSparkCachePath
+    if ($cachePath -and (Test-Path -LiteralPath $cachePath -PathType Leaf))
+    {
+        try
+        {
+            $cached = [System.IO.File]::ReadAllText($cachePath) | ConvertFrom-Json
+            $version = [string]$cached.version
+            $uri = [string]$cached.uri
+            $sha = [string]$cached.sha256
+            if ($version -match '^\d+\.\d+\.\d+$' -and -not [string]::IsNullOrWhiteSpace($uri) -and $sha -match '^[A-Fa-f0-9]{64}$')
+            {
+                $script:OpenCodeSparkVersion = $version
+                $script:OpenCodeSparkZipUri = $uri
+                $script:OpenCodeSparkZipSha256 = $sha.ToUpperInvariant()
+            }
+        }
+        catch
+        {
+            $script:OpenCodeSparkVersion = $script:OpenCodeSparkPinnedVersion
+            $script:OpenCodeSparkZipUri = $script:OpenCodeSparkPinnedZipUri
+            $script:OpenCodeSparkZipSha256 = $script:OpenCodeSparkPinnedZipSha256
+        }
+    }
+
+    $script:OpenCodeSparkDesiredReady = $true
+}
+
+function Set-OpenCodeSparkRelease
+{
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$Version,
+        [Parameter(Mandatory)][string]$Uri,
+        [Parameter(Mandatory)][string]$Sha256
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Sha256))
+    {
+        throw 'OpenCode zip hash was not confirmed'
+    }
+
+    $script:OpenCodeSparkVersion = $Version
+    $script:OpenCodeSparkZipUri = $Uri
+    $script:OpenCodeSparkZipSha256 = $Sha256
+    $script:OpenCodeSparkDesiredReady = $true
+}
+
+function Write-OpenCodeSparkCache
+{
+    [CmdletBinding()]
+    param()
+
+    if ([string]::IsNullOrWhiteSpace($script:OpenCodeSparkZipSha256))
+    {
+        throw 'OpenCode zip hash was not confirmed'
+    }
+
+    $path = Get-OpenCodeSparkCachePath
+    if ([string]::IsNullOrWhiteSpace($path))
+    {
+        throw 'OpenCode cache path is not available'
+    }
+
+    $directory = Split-Path -Parent $path
+    if (-not (Test-Path -LiteralPath $directory))
+    {
+        New-Item -ItemType Directory -Path $directory -Force | Out-Null
+    }
+
+    $payload = @{
+        version = $script:OpenCodeSparkVersion
+        uri     = $script:OpenCodeSparkZipUri
+        sha256  = $script:OpenCodeSparkZipSha256
+    } | ConvertTo-Json -Compress
+
+    $encoding = New-Object System.Text.UTF8Encoding $false
+    [System.IO.File]::WriteAllText($path, $payload, $encoding)
+}
+
+function Get-OpenCodeSparkNewestInstalledVersion
+{
+    [CmdletBinding()]
+    param()
+
+    if ([string]::IsNullOrWhiteSpace($env:LOCALAPPDATA))
+    {
+        return $null
+    }
+
+    $base = Join-Path $env:LOCALAPPDATA 'opencode-cli'
+    if (-not (Test-Path -LiteralPath $base -PathType Container))
+    {
+        return $null
+    }
+
+    $newest = $null
+    foreach ($dir in @(Get-ChildItem -LiteralPath $base -Directory -ErrorAction SilentlyContinue))
+    {
+        if ($dir.Name -notmatch '^(\d+\.\d+\.\d+)-x64$')
+        {
+            continue
+        }
+
+        $version = $Matches[1]
+        $exe = Join-Path $dir.FullName 'opencode.exe'
+        if (-not (Test-Path -LiteralPath $exe -PathType Leaf))
+        {
+            continue
+        }
+
+        if ($null -eq $newest -or (Compare-OpenCodeSparkVersion -Left $version -Right $newest) -gt 0)
+        {
+            $newest = $version
+        }
+    }
+
+    return $newest
+}
+
+function Resolve-OpenCodeSparkRelease
+{
+    [CmdletBinding()]
+    param()
+
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+    $headers = Get-OpenCodeSparkGitHubHeaders
+    $payload = Invoke-RestMethod -Uri 'https://api.github.com/repos/anomalyco/opencode/releases/latest' -Headers $headers -TimeoutSec 30 -ErrorAction Stop
+    return (ConvertTo-OpenCodeSparkRelease -Release $payload)
 }
 
 function Get-OpenCodeSparkBinDirectory
@@ -101,7 +371,7 @@ function Invoke-OpenCodeSpark {
 
     # The winget ARM64 build cannot start the TUI. bun:ffi is disabled there.
     # The x64 build runs under emulation and the TUI comes up.
-    $opencode = Join-Path $env:LOCALAPPDATA 'opencode-cli\1.19.3-x64\opencode.exe'
+    $opencode = '__OPENCODE_SPARK_EXECUTABLE__'
     if (-not (Test-Path $opencode)) {
         throw 'opencode x64 build is not installed'
     }
@@ -129,8 +399,8 @@ if ($MyInvocation.InvocationName -ne '.') {
 }
 '@
 
-    # Interpolate version into launcher script
-    $text = $text -replace 'opencode-cli\\1\.19\.3-x64', "opencode-cli\$script:OpenCodeSparkVersion-x64"
+    Initialize-OpenCodeSparkDesired
+    $text = $text.Replace('__OPENCODE_SPARK_EXECUTABLE__', (Get-OpenCodeSparkExecutablePath))
 
     return ((ConvertTo-OpenCodeSparkText $text) + "`n")
 }
@@ -224,6 +494,7 @@ function Get-OpenCodeSparkExecutablePath
     [CmdletBinding()]
     param()
 
+    Initialize-OpenCodeSparkDesired
     $folder = 'opencode-cli\' + $script:OpenCodeSparkVersion + '-x64'
     return (Join-Path $env:LOCALAPPDATA (Join-Path $folder 'opencode.exe'))
 }
@@ -303,13 +574,16 @@ function Install-OpenCodeSparkExecutable
     {
         $zip = Join-Path $temp 'opencode-windows-x64.zip'
         [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+        if ([string]::IsNullOrWhiteSpace($script:OpenCodeSparkZipSha256))
+        {
+            throw 'OpenCode zip hash was not confirmed'
+        }
+
         Invoke-WebRequest -Uri $script:OpenCodeSparkZipUri -OutFile $zip -UseBasicParsing
-        if (-not [string]::IsNullOrWhiteSpace($script:OpenCodeSparkZipSha256)) {
-            $hash = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash
-            if (-not (Test-OpenCodeSparkHashEqual -Actual $hash -Expected $script:OpenCodeSparkZipSha256))
-            {
-                throw "OpenCode zip hash was $hash"
-            }
+        $hash = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash
+        if (-not (Test-OpenCodeSparkHashEqual -Actual $hash -Expected $script:OpenCodeSparkZipSha256))
+        {
+            throw "OpenCode zip hash was $hash"
         }
 
         $extract = Join-Path $temp 'extract'
@@ -424,7 +698,23 @@ function Set-OpenCodeSpark
     [CmdletBinding()]
     param()
 
+    Initialize-OpenCodeSparkDesired
+    $cachedVersion = $script:OpenCodeSparkVersion
+    $release = Resolve-OpenCodeSparkRelease
+    if ((Compare-OpenCodeSparkVersion -Left $release.Version -Right $cachedVersion) -lt 0)
+    {
+        throw "OpenCode release $($release.Version) is older than cached $cachedVersion"
+    }
+
+    $installed = Get-OpenCodeSparkNewestInstalledVersion
+    if ($installed -and (Compare-OpenCodeSparkVersion -Left $release.Version -Right $installed) -lt 0)
+    {
+        throw "OpenCode release $($release.Version) is older than installed $installed"
+    }
+
+    Set-OpenCodeSparkRelease -Version $release.Version -Uri $release.Uri -Sha256 $release.Sha256
     Install-OpenCodeSparkExecutable
+    Write-OpenCodeSparkCache
 
     $bin = Get-OpenCodeSparkBinDirectory
     Set-OpenCodeSparkTextFile -Path (Join-Path $bin 'opencode-spark.ps1') -Text (Get-OpenCodeSparkLauncherText)

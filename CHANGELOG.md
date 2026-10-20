@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2026-10-20
+
+### Changed
+- `OpenCode.Spark` does not resolve an OpenCode version while the helper is parsed. Get and Test read `%LOCALAPPDATA%\opencode-cli\release.json`, or the pinned 1.19.3 x64 release when that file is absent. They do not call GitHub, so a rate limit or a slow API cannot stall `winget configure` or the unit tests, and those scripts cannot observe different versions.
+- Set is the only step that calls the GitHub releases API. It sends a User-Agent, uses the `opencode-windows-x64.zip` asset URL, and requires that asset's SHA-256 digest. The zip hash is checked before extract. A missing asset, a missing digest, a hash mismatch, or a release older than the cached or installed binary fails the resource. It does not fall back to 1.19.3, does not skip the hash, and does not point `opencode-spark` at an older binary. Older version folders are left in place. `Install-Packages.ps1` still warns and continues if that step fails.
+
 ## [1.3.0] - 2026-10-20
 
 ### Added
