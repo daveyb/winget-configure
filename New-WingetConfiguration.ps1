@@ -834,7 +834,7 @@ function Build-DscYaml
     Add-WslScriptResource -Builder $sb `
         -ResourceId 'OpenCode.Spark' `
         -DependsOn $openCodeDependsOn `
-        -Description 'Install OpenCode 1.19.3 x64 and write opencode-spark so the TUI and run pass --auto' `
+        -Description 'Install the verified OpenCode x64 asset and write opencode-spark so the TUI and run pass --auto' `
         -GetScript (Get-EmbeddedScript -Library $openCodeLibrary -Invocation 'return (Get-OpenCodeSparkReport)') `
         -TestScript (Get-EmbeddedScript -Library $openCodeLibrary -Invocation 'return (Test-OpenCodeSpark)') `
         -SetScript (Get-EmbeddedScript -Library $openCodeLibrary -Invocation 'Set-OpenCodeSpark')

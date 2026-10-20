@@ -577,7 +577,9 @@ if (-not $Thermonuclear)
     Write-Host ''
 }
 
-# Step 5: opencode-spark launcher, OpenCode 1.19.3 x64, and user Path.
+# Step 5: opencode-spark launcher, verified OpenCode x64 asset, and user Path.
+# Set calls GitHub only for this step. A missing asset or hash fails the step
+# and does not fall back to an unverified zip.
 # Same desired state as the OpenCode.Spark DSC resource, which dependsOn
 # Microsoft.PowerShell and Proton.ProtonPass.CLI when those packages are present.
 # Skip the step unless both succeeded. A failure here must not abort
