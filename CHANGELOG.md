@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - `OpenCode.Spark` writes `opencode-spark.ps1` and `opencode-spark.cmd` to the user `~\.local\bin` directory and adds that directory to the user Path. `opencode-spark` reads the LiteLLM master key from Proton Pass when it starts. Opening the TUI, and `opencode-spark run`, pass `--auto`. Permissions that are not explicitly denied are approved. Pass `--no-auto` to confirm those prompts. Other OpenCode subcommands are unchanged.
+- `OpenCode.Spark` downloads OpenCode 1.19.3 for Windows x64 from the pinned GitHub release and checks its SHA-256 before it extracts `opencode.exe`. The winget package is not installed. That package's ARM64 build cannot start the TUI. The resource waits for `Microsoft.PowerShell` and `Proton.ProtonPass.CLI`.
 
 ## [1.2.3] - 2026-10-20
 

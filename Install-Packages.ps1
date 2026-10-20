@@ -577,17 +577,30 @@ if (-not $Thermonuclear)
     Write-Host ''
 }
 
-# Step 5: opencode-spark launcher and user Path.
+# Step 5: opencode-spark launcher, OpenCode 1.19.3 x64, and user Path.
 # Same desired state as the OpenCode.Spark DSC resource, which dependsOn
-# Proton.ProtonPass.CLI when that package is present.
-# Skip the step unless that package succeeded. A failure here must not abort
+# Microsoft.PowerShell and Proton.ProtonPass.CLI when those packages are present.
+# Skip the step unless both succeeded. A failure here must not abort
 # the package run.
 if (-not $Thermonuclear)
 {
-    $passResult = @($results | Where-Object { $_.PackageId -eq 'Proton.ProtonPass.CLI' -and $_.Success })
-    if ($passResult.Count -eq 0)
+    $openCodePackageIds = @(
+        'Microsoft.PowerShell',
+        'Proton.ProtonPass.CLI'
+    )
+    $missingOpenCodePackages = @()
+    foreach ($openCodePackageId in $openCodePackageIds)
     {
-        Write-Warning 'opencode-spark was not applied. Proton.ProtonPass.CLI must succeed first. Package installation will continue.'
+        $openCodeResult = @($results | Where-Object { $_.PackageId -eq $openCodePackageId -and $_.Success })
+        if ($openCodeResult.Count -eq 0)
+        {
+            $missingOpenCodePackages += $openCodePackageId
+        }
+    }
+
+    if ($missingOpenCodePackages.Count -gt 0)
+    {
+        Write-Warning ("opencode-spark was not applied. These packages must succeed first: {0}. Package installation will continue." -f ($missingOpenCodePackages -join ', '))
     }
     elseif (-not (Get-Command -Name Set-OpenCodeSpark -ErrorAction SilentlyContinue))
     {

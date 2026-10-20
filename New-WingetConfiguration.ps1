@@ -448,9 +448,12 @@ $SHELL_PACKAGE_IDS = @(
     'JanDeDobbeleer.OhMyPosh'
 )
 
-# OpenCode.Spark names this package in dependsOn. The WinGetPackage resource
+# OpenCode.Spark names these packages in dependsOn. Each WinGetPackage resource
 # gets an id only for that reference. Other packages stay unnamed.
-$OPENCODE_SPARK_PACKAGE_ID = 'Proton.ProtonPass.CLI'
+$OPENCODE_SPARK_PACKAGE_IDS = @(
+    'Microsoft.PowerShell',
+    'Proton.ProtonPass.CLI'
+)
 
 function Add-YamlBlockScalar
 {
@@ -771,7 +774,7 @@ function Build-DscYaml
             $null = $sb.AppendLine('      dependsOn:')
             $null = $sb.AppendLine('        - Microsoft.WSL.Unpin')
         }
-        $namedForDependsOn = ($SHELL_PACKAGE_IDS -contains $entry.Id) -or ($entry.Id -eq $OPENCODE_SPARK_PACKAGE_ID)
+        $namedForDependsOn = ($SHELL_PACKAGE_IDS -contains $entry.Id) -or ($OPENCODE_SPARK_PACKAGE_IDS -contains $entry.Id)
         if ($ensure -eq 'Present' -and $namedForDependsOn)
         {
             $null = $sb.AppendLine("      id: $($entry.Id)")
@@ -809,16 +812,19 @@ function Build-DscYaml
         -SetScript (Get-EmbeddedScript -Library $shellLibrary -Invocation 'Set-ShellProfile')
 
     $openCodeDependsOn = @()
-    foreach ($packageEntry in $Entries)
+    foreach ($packageId in $OPENCODE_SPARK_PACKAGE_IDS)
     {
-        $packageEnsure = 'Present'
-        if ($packageEntry.Ensure -and ($packageEntry.Ensure.Trim() -ne ''))
+        foreach ($packageEntry in $Entries)
         {
-            $packageEnsure = $packageEntry.Ensure
-        }
-        if (($packageEntry.Id -eq $OPENCODE_SPARK_PACKAGE_ID) -and ($packageEnsure -ne 'Absent'))
-        {
-            $openCodeDependsOn = @($OPENCODE_SPARK_PACKAGE_ID)
+            $packageEnsure = 'Present'
+            if ($packageEntry.Ensure -and ($packageEntry.Ensure.Trim() -ne ''))
+            {
+                $packageEnsure = $packageEntry.Ensure
+            }
+            if (($packageEntry.Id -eq $packageId) -and ($packageEnsure -ne 'Absent'))
+            {
+                $openCodeDependsOn += $packageId
+            }
         }
     }
 
@@ -828,7 +834,7 @@ function Build-DscYaml
     Add-WslScriptResource -Builder $sb `
         -ResourceId 'OpenCode.Spark' `
         -DependsOn $openCodeDependsOn `
-        -Description 'Write opencode-spark so the TUI and run pass --auto' `
+        -Description 'Install OpenCode 1.19.3 x64 and write opencode-spark so the TUI and run pass --auto' `
         -GetScript (Get-EmbeddedScript -Library $openCodeLibrary -Invocation 'return (Get-OpenCodeSparkReport)') `
         -TestScript (Get-EmbeddedScript -Library $openCodeLibrary -Invocation 'return (Test-OpenCodeSpark)') `
         -SetScript (Get-EmbeddedScript -Library $openCodeLibrary -Invocation 'Set-OpenCodeSpark')

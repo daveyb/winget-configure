@@ -4,6 +4,11 @@
 
 $ErrorActionPreference = 'Stop'
 
+# Pinned x64 zip. The winget ARM64 build cannot start the TUI.
+$script:OpenCodeSparkVersion = '1.19.3'
+$script:OpenCodeSparkZipUri = 'https://github.com/anomalyco/opencode/releases/download/v1.19.3/opencode-windows-x64.zip'
+$script:OpenCodeSparkZipSha256 = 'E4CE9117F55FC068414513789F8C7D1049F855D7518BB4E350B9170A3A20D8C3'
+
 function Get-OpenCodeSparkBinDirectory
 {
     [CmdletBinding()]
@@ -195,6 +200,124 @@ function Test-OpenCodeSparkPathEntry
     return $false
 }
 
+function Get-OpenCodeSparkExecutablePath
+{
+    [CmdletBinding()]
+    param()
+
+    $folder = 'opencode-cli\' + $script:OpenCodeSparkVersion + '-x64'
+    return (Join-Path $env:LOCALAPPDATA (Join-Path $folder 'opencode.exe'))
+}
+
+function Test-OpenCodeSparkHashEqual
+{
+    [CmdletBinding()]
+    param(
+        [AllowEmptyString()][string]$Actual,
+        [AllowEmptyString()][string]$Expected
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Actual) -or [string]::IsNullOrWhiteSpace($Expected))
+    {
+        return $false
+    }
+
+    return ($Actual.Trim().ToUpperInvariant() -eq $Expected.Trim().ToUpperInvariant())
+}
+
+function Test-OpenCodeSparkVersionOutput
+{
+    [CmdletBinding()]
+    param([AllowEmptyString()][string]$Text)
+
+    $normalized = ($Text -replace "`0", '').Trim()
+    return ($normalized -eq $script:OpenCodeSparkVersion)
+}
+
+function Get-OpenCodeSparkVersionOutput
+{
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][string]$Path)
+
+    $saved = $ErrorActionPreference
+    $ErrorActionPreference = 'SilentlyContinue'
+    try
+    {
+        $output = (& $Path --version 2>&1 | Out-String)
+    }
+    finally
+    {
+        $ErrorActionPreference = $saved
+    }
+
+    return ($output -replace "`0", '')
+}
+
+function Test-OpenCodeSparkExecutable
+{
+    [CmdletBinding()]
+    param()
+
+    $path = Get-OpenCodeSparkExecutablePath
+    if (-not (Test-Path -LiteralPath $path -PathType Leaf))
+    {
+        return $false
+    }
+
+    return (Test-OpenCodeSparkVersionOutput (Get-OpenCodeSparkVersionOutput -Path $path))
+}
+
+function Install-OpenCodeSparkExecutable
+{
+    [CmdletBinding()]
+    param()
+
+    if (Test-OpenCodeSparkExecutable)
+    {
+        return
+    }
+
+    $destination = Get-OpenCodeSparkExecutablePath
+    $temp = Join-Path $env:TEMP ('opencode-spark-' + [guid]::NewGuid().ToString('n'))
+    New-Item -ItemType Directory -Path $temp -Force | Out-Null
+    try
+    {
+        $zip = Join-Path $temp 'opencode-windows-x64.zip'
+        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+        Invoke-WebRequest -Uri $script:OpenCodeSparkZipUri -OutFile $zip -UseBasicParsing
+        $hash = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash
+        if (-not (Test-OpenCodeSparkHashEqual -Actual $hash -Expected $script:OpenCodeSparkZipSha256))
+        {
+            throw "OpenCode zip hash was $hash"
+        }
+
+        $extract = Join-Path $temp 'extract'
+        Expand-Archive -LiteralPath $zip -DestinationPath $extract -Force
+        $found = @(Get-ChildItem -LiteralPath $extract -Filter 'opencode.exe' -Recurse -File)
+        if ($found.Count -lt 1)
+        {
+            throw 'OpenCode zip did not contain opencode.exe'
+        }
+
+        $directory = Split-Path -Parent $destination
+        if (-not (Test-Path -LiteralPath $directory))
+        {
+            New-Item -ItemType Directory -Path $directory -Force | Out-Null
+        }
+
+        Copy-Item -LiteralPath $found[0].FullName -Destination $destination -Force
+    }
+    finally
+    {
+        Remove-Item -LiteralPath $temp -Recurse -Force -ErrorAction SilentlyContinue
+    }
+
+    if (-not (Test-OpenCodeSparkExecutable))
+    {
+        throw 'OpenCode executable was not installed.'
+    }
+}
+
 function Get-OpenCodeSparkFacts
 {
     [CmdletBinding()]
@@ -202,9 +325,10 @@ function Get-OpenCodeSparkFacts
 
     $bin = Get-OpenCodeSparkBinDirectory
     return @{
-        Launcher = [bool](Test-OpenCodeSparkTextFile -Path (Join-Path $bin 'opencode-spark.ps1') -Desired (Get-OpenCodeSparkLauncherText))
-        Shim     = [bool](Test-OpenCodeSparkTextFile -Path (Join-Path $bin 'opencode-spark.cmd') -Desired (Get-OpenCodeSparkCommandText))
-        Path     = [bool](Test-OpenCodeSparkPathEntry)
+        Launcher   = [bool](Test-OpenCodeSparkTextFile -Path (Join-Path $bin 'opencode-spark.ps1') -Desired (Get-OpenCodeSparkLauncherText))
+        Shim       = [bool](Test-OpenCodeSparkTextFile -Path (Join-Path $bin 'opencode-spark.cmd') -Desired (Get-OpenCodeSparkCommandText))
+        Path       = [bool](Test-OpenCodeSparkPathEntry)
+        Executable = [bool](Test-OpenCodeSparkExecutable)
     }
 }
 
@@ -247,9 +371,14 @@ function Get-OpenCodeSparkReport
     {
         $pathState = 'present'
     }
+    $executableState = 'missing'
+    if ($facts.Executable)
+    {
+        $executableState = 'present'
+    }
 
     return @{
-        Result = ('launcher={0};shim={1};path={2}' -f $launcherState, $shimState, $pathState)
+        Result = ('launcher={0};shim={1};path={2};opencode={3}' -f $launcherState, $shimState, $pathState, $executableState)
     }
 }
 
@@ -261,7 +390,7 @@ function Test-OpenCodeSpark
     try
     {
         $facts = Get-OpenCodeSparkFacts
-        return [bool]($facts.Launcher -and $facts.Shim -and $facts.Path)
+        return [bool]($facts.Launcher -and $facts.Shim -and $facts.Path -and $facts.Executable)
     }
     catch
     {
@@ -273,6 +402,8 @@ function Set-OpenCodeSpark
 {
     [CmdletBinding()]
     param()
+
+    Install-OpenCodeSparkExecutable
 
     $bin = Get-OpenCodeSparkBinDirectory
     Set-OpenCodeSparkTextFile -Path (Join-Path $bin 'opencode-spark.ps1') -Text (Get-OpenCodeSparkLauncherText)
@@ -294,8 +425,8 @@ function Set-OpenCodeSpark
     }
 
     $facts = Get-OpenCodeSparkFacts
-    if (-not ($facts.Launcher -and $facts.Shim -and $facts.Path))
+    if (-not ($facts.Launcher -and $facts.Shim -and $facts.Path -and $facts.Executable))
     {
-        throw 'opencode-spark launcher, command shim, or user Path entry was not applied.'
+        throw 'opencode-spark launcher, command shim, user Path entry, or OpenCode executable was not applied.'
     }
 }

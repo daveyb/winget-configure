@@ -143,9 +143,9 @@ Run `opencode-spark` with no extra flags. That opens the TUI and passes `--auto`
 opencode-spark
 ```
 
-`OpenCode.Spark` writes `opencode-spark.ps1` and `opencode-spark.cmd` to `~\.local\bin` and adds that directory to the user Path. It depends on `Proton.ProtonPass.CLI` when that package is present. The x64 binary at `%LOCALAPPDATA%\opencode-cli\1.19.3-x64\opencode.exe` must already exist. This resource does not install that binary.
+`OpenCode.Spark` writes `opencode-spark.ps1` and `opencode-spark.cmd` to `~\.local\bin` and adds that directory to the user Path. It downloads OpenCode `1.19.3` for Windows x64 from the pinned GitHub release, checks the SHA-256, and extracts `opencode.exe` to `%LOCALAPPDATA%\opencode-cli\1.19.3-x64\opencode.exe`. The winget package is not used. That package's ARM64 build cannot start the TUI. The resource waits for `Microsoft.PowerShell` and `Proton.ProtonPass.CLI`. Both packages are already in `winget-packages.yml`.
 
-`Install-Packages.ps1` runs the same step after the shell profile, and only if `Proton.ProtonPass.CLI` succeeded. If the step fails, the script warns and package installation still finishes.
+`Install-Packages.ps1` runs the same step after the shell profile, and only if those two packages succeeded. If the step fails, the script warns and package installation still finishes.
 
 ## Editing the Package List
 
