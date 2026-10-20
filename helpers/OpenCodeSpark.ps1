@@ -7,7 +7,10 @@ $ErrorActionPreference = 'Stop'
 # Cached x64 zip. The winget ARM64 build cannot start the TUI.
 # Get reads release.json after Set has verified a release, or this pin when
 # that file is absent. Test is false when the cache is missing or older than
-# OpenCodeSparkCacheTtlHours, so Set can fetch the current release.
+# OpenCodeSparkCacheTtlHours, so Set runs. Set refreshes fetched_at and does
+# not replace opencode.exe when the resolved version and digest already match
+# the installed tree. The GitHub API digest does not authorize a release that
+# is not this pin. Asset downloads are limited to GitHub hosts.
 # Do not call GitHub while this file is parsed, and do not call it from Get or Test.
 $script:OpenCodeSparkPinnedVersion = '1.19.3'
 $script:OpenCodeSparkPinnedZipUri = 'https://github.com/anomalyco/opencode/releases/download/v1.19.3/opencode-windows-x64.zip'
@@ -30,6 +33,52 @@ function Get-OpenCodeSparkGitHubHeaders
         'Accept'               = 'application/vnd.github+json'
         'X-GitHub-Api-Version' = '2022-11-28'
     }
+}
+
+function Test-OpenCodeSparkAssetHost
+{
+    [CmdletBinding()]
+    param(
+        [AllowEmptyString()][string]$Uri,
+        [switch]$Redirect
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Uri))
+    {
+        return $false
+    }
+
+    $parsed = $null
+    if (-not [uri]::TryCreate($Uri, [UriKind]::Absolute, [ref]$parsed))
+    {
+        return $false
+    }
+
+    if ($parsed.Scheme -ne 'https')
+    {
+        return $false
+    }
+
+    $hostName = $parsed.Host
+    if ([string]::IsNullOrWhiteSpace($hostName))
+    {
+        return $false
+    }
+
+    $hostName = $hostName.ToLowerInvariant()
+    if ($hostName -eq 'github.com' -or $hostName -eq 'objects.githubusercontent.com')
+    {
+        return $true
+    }
+
+    # GitHub's current release CDN. The asset URL itself stays on github.com
+    # or objects.githubusercontent.com; only a redirect may land here.
+    if ($Redirect -and $hostName -eq 'release-assets.githubusercontent.com')
+    {
+        return $true
+    }
+
+    return $false
 }
 
 function Compare-OpenCodeSparkVersion
@@ -115,6 +164,11 @@ function ConvertTo-OpenCodeSparkRelease
     if ([string]::IsNullOrWhiteSpace($uri))
     {
         throw 'OpenCode asset URL was empty'
+    }
+
+    if (-not (Test-OpenCodeSparkAssetHost -Uri $uri))
+    {
+        throw "OpenCode asset host is not allowlisted: $uri"
     }
 
     $digest = [string]$asset.digest
@@ -625,6 +679,98 @@ function Test-OpenCodeSparkExecutable
     return (Test-OpenCodeSparkVersionOutput (Get-OpenCodeSparkVersionOutput -Path $path))
 }
 
+function Save-OpenCodeSparkAsset
+{
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$Uri,
+        [Parameter(Mandatory)][string]$OutFile
+    )
+
+    if (-not (Test-OpenCodeSparkAssetHost -Uri $Uri))
+    {
+        throw "OpenCode asset host is not allowlisted: $Uri"
+    }
+
+    $current = $Uri
+    for ($hop = 0; $hop -lt 5; $hop++)
+    {
+        $request = [System.Net.HttpWebRequest][System.Net.WebRequest]::Create($current)
+        $request.Method = 'GET'
+        $request.AllowAutoRedirect = $false
+        $request.UserAgent = 'winget-configure'
+        $request.Timeout = 300000
+        $request.ReadWriteTimeout = 300000
+
+        $response = $null
+        try
+        {
+            $response = $request.GetResponse()
+        }
+        catch [System.Net.WebException]
+        {
+            $response = $_.Exception.Response
+            if ($null -eq $response)
+            {
+                throw
+            }
+        }
+
+        try
+        {
+            $status = [int]$response.StatusCode
+            if ($status -ge 300 -and $status -lt 400)
+            {
+                $next = [string]$response.Headers['Location']
+                if ([string]::IsNullOrWhiteSpace($next))
+                {
+                    throw 'OpenCode asset redirect was empty'
+                }
+
+                $nextUri = (New-Object System.Uri -ArgumentList ([uri]$current), $next).AbsoluteUri
+                if (-not (Test-OpenCodeSparkAssetHost -Uri $nextUri -Redirect))
+                {
+                    throw "OpenCode asset redirect host is not allowlisted: $nextUri"
+                }
+
+                $current = $nextUri
+                continue
+            }
+
+            if ($status -ne 200)
+            {
+                throw "OpenCode asset download returned $status"
+            }
+
+            $stream = $response.GetResponseStream()
+            $file = [System.IO.File]::Create($OutFile)
+            try
+            {
+                $stream.CopyTo($file)
+            }
+            finally
+            {
+                $file.Dispose()
+                if ($null -ne $stream)
+                {
+                    $stream.Dispose()
+                }
+            }
+
+            return
+        }
+        finally
+        {
+            if ($null -ne $response)
+            {
+                $response.Dispose()
+            }
+        }
+    }
+
+    throw 'OpenCode asset redirect limit exceeded'
+}
+
 function Install-OpenCodeSparkExecutable
 {
     [CmdletBinding()]
@@ -647,7 +793,12 @@ function Install-OpenCodeSparkExecutable
             throw 'OpenCode zip hash was not confirmed'
         }
 
-        Invoke-WebRequest -Uri $script:OpenCodeSparkZipUri -OutFile $zip -UseBasicParsing
+        if (-not (Test-OpenCodeSparkAssetHost -Uri $script:OpenCodeSparkZipUri))
+        {
+            throw "OpenCode asset host is not allowlisted: $($script:OpenCodeSparkZipUri)"
+        }
+
+        Save-OpenCodeSparkAsset -Uri $script:OpenCodeSparkZipUri -OutFile $zip
         $hash = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash
         if (-not (Test-OpenCodeSparkHashEqual -Actual $hash -Expected $script:OpenCodeSparkZipSha256))
         {
@@ -768,6 +919,56 @@ function Test-OpenCodeSpark
     }
 }
 
+function Test-OpenCodeSparkInstalledRelease
+{
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$Version,
+        [Parameter(Mandatory)][string]$Sha256
+    )
+
+    if ([string]::IsNullOrWhiteSpace($env:LOCALAPPDATA))
+    {
+        return $false
+    }
+
+    $folder = Join-Path (Join-Path $env:LOCALAPPDATA 'opencode-cli') ($Version + '-x64')
+    $exe = Join-Path $folder 'opencode.exe'
+    if (-not (Test-Path -LiteralPath $exe -PathType Leaf))
+    {
+        return $false
+    }
+
+    $cached = Read-OpenCodeSparkCache
+    if ($null -eq $cached)
+    {
+        return $false
+    }
+
+    if ($cached.Version -ne $Version)
+    {
+        return $false
+    }
+
+    return (Test-OpenCodeSparkHashEqual -Actual $cached.Sha256 -Expected $Sha256)
+}
+
+function Test-OpenCodeSparkReleaseInstallable
+{
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$Version,
+        [Parameter(Mandatory)][string]$Sha256
+    )
+
+    if (Test-OpenCodeSparkInstalledRelease -Version $Version -Sha256 $Sha256)
+    {
+        return $true
+    }
+
+    return (Test-OpenCodeSparkHashEqual -Actual $Sha256 -Expected $script:OpenCodeSparkPinnedZipSha256)
+}
+
 function Set-OpenCodeSpark
 {
     [CmdletBinding()]
@@ -787,8 +988,23 @@ function Set-OpenCodeSpark
         throw "OpenCode release $($release.Version) is older than installed $installed"
     }
 
+    if (-not (Test-OpenCodeSparkAssetHost -Uri $release.Uri))
+    {
+        throw "OpenCode asset host is not allowlisted: $($release.Uri)"
+    }
+
+    $treeMatch = Test-OpenCodeSparkInstalledRelease -Version $release.Version -Sha256 $release.Sha256
+    if (-not (Test-OpenCodeSparkReleaseInstallable -Version $release.Version -Sha256 $release.Sha256))
+    {
+        throw "OpenCode release $($release.Version) digest is not the in-repo pin"
+    }
+
     Set-OpenCodeSparkRelease -Version $release.Version -Uri $release.Uri -Sha256 $release.Sha256
-    Install-OpenCodeSparkExecutable
+    if (-not $treeMatch)
+    {
+        Install-OpenCodeSparkExecutable
+    }
+
     Write-OpenCodeSparkCache
 
     $bin = Get-OpenCodeSparkBinDirectory

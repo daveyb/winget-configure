@@ -133,15 +133,23 @@ function Assert-OpenCodeSparkThrows
     Assert-True $threw $Label
 }
 
-$resolved = ConvertTo-OpenCodeSparkRelease -Release (New-OpenCodeSparkReleaseFixture -Tag 'v1.20.0' -Url 'https://example.test/opencode-windows-x64.zip' -Digest 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
+$resolved = ConvertTo-OpenCodeSparkRelease -Release (New-OpenCodeSparkReleaseFixture -Tag 'v1.20.0' -Url 'https://github.com/anomalyco/opencode/releases/download/v1.20.0/opencode-windows-x64.zip' -Digest 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
 Assert-Equal $resolved.Version '1.20.0' 'release version strips one leading v'
-Assert-Equal $resolved.Uri 'https://example.test/opencode-windows-x64.zip' 'release uses the asset URL'
+Assert-Equal $resolved.Uri 'https://github.com/anomalyco/opencode/releases/download/v1.20.0/opencode-windows-x64.zip' 'release uses the asset URL'
 Assert-Equal $resolved.Sha256 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' 'release keeps the asset digest'
-Assert-OpenCodeSparkThrows { ConvertTo-OpenCodeSparkRelease -Release (New-OpenCodeSparkReleaseFixture -Tag 'vv1.19.3' -Url 'https://example.test/opencode-windows-x64.zip' -Digest 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') } 'TrimStart tag vv1.19.3 is rejected'
-Assert-OpenCodeSparkThrows { ConvertTo-OpenCodeSparkRelease -Release (New-OpenCodeSparkReleaseFixture -Tag 'version-1.2.3' -Url 'https://example.test/opencode-windows-x64.zip' -Digest 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') } 'TrimStart tag version-1.2.3 is rejected'
-Assert-OpenCodeSparkThrows { ConvertTo-OpenCodeSparkRelease -Release (New-OpenCodeSparkReleaseFixture -Tag 'v1.20.0' -Url 'https://example.test/opencode-windows-x64.zip' -Digest 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' -Name 'opencode-windows-arm64.zip') } 'missing x64 asset is rejected'
-Assert-OpenCodeSparkThrows { ConvertTo-OpenCodeSparkRelease -Release (New-OpenCodeSparkReleaseFixture -Tag 'v1.20.0' -Url 'https://example.test/opencode-windows-x64.zip' -Digest '') } 'missing digest is rejected'
+Assert-OpenCodeSparkThrows { ConvertTo-OpenCodeSparkRelease -Release (New-OpenCodeSparkReleaseFixture -Tag 'vv1.19.3' -Url 'https://github.com/anomalyco/opencode/releases/download/v1.19.3/opencode-windows-x64.zip' -Digest 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') } 'TrimStart tag vv1.19.3 is rejected'
+Assert-OpenCodeSparkThrows { ConvertTo-OpenCodeSparkRelease -Release (New-OpenCodeSparkReleaseFixture -Tag 'version-1.2.3' -Url 'https://github.com/anomalyco/opencode/releases/download/v1.2.3/opencode-windows-x64.zip' -Digest 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') } 'TrimStart tag version-1.2.3 is rejected'
+Assert-OpenCodeSparkThrows { ConvertTo-OpenCodeSparkRelease -Release (New-OpenCodeSparkReleaseFixture -Tag 'v1.20.0' -Url 'https://github.com/anomalyco/opencode/releases/download/v1.20.0/opencode-windows-x64.zip' -Digest 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' -Name 'opencode-windows-arm64.zip') } 'missing x64 asset is rejected'
+Assert-OpenCodeSparkThrows { ConvertTo-OpenCodeSparkRelease -Release (New-OpenCodeSparkReleaseFixture -Tag 'v1.20.0' -Url 'https://github.com/anomalyco/opencode/releases/download/v1.20.0/opencode-windows-x64.zip' -Digest '') } 'missing digest is rejected'
+Assert-OpenCodeSparkThrows { ConvertTo-OpenCodeSparkRelease -Release (New-OpenCodeSparkReleaseFixture -Tag 'v1.20.0' -Url 'https://example.test/opencode-windows-x64.zip' -Digest 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') } 'asset host example.test is rejected'
 Assert-OpenCodeSparkThrows { Set-OpenCodeSparkRelease -Version '1.20.0' -Uri 'https://example.test/opencode-windows-x64.zip' -Sha256 '   ' } 'empty hash is not confirmed'
+Assert-True (Test-OpenCodeSparkAssetHost -Uri 'https://github.com/anomalyco/opencode/releases/download/v1.19.3/opencode-windows-x64.zip') 'github.com asset host is allowlisted'
+Assert-True (Test-OpenCodeSparkAssetHost -Uri 'https://objects.githubusercontent.com/github-production-release-asset/opencode-windows-x64.zip') 'objects.githubusercontent.com asset host is allowlisted'
+Assert-True (-not (Test-OpenCodeSparkAssetHost -Uri 'https://release-assets.githubusercontent.com/asset')) 'release-assets is not an asset URL host'
+Assert-True (Test-OpenCodeSparkAssetHost -Uri 'https://release-assets.githubusercontent.com/asset' -Redirect) 'release-assets is an allowlisted redirect'
+Assert-True (-not (Test-OpenCodeSparkAssetHost -Uri 'http://github.com/anomalyco/opencode/releases/download/v1.19.3/opencode-windows-x64.zip')) 'http asset host is rejected'
+Assert-True (-not (Test-OpenCodeSparkAssetHost -Uri 'https://example.test/opencode-windows-x64.zip')) 'example.test asset host is rejected'
+Assert-True (-not $helperText.Contains('Invoke-WebRequest')) 'asset download does not call Invoke-WebRequest'
 
 $savedLocalAppData = $env:LOCALAPPDATA
 $installRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('opencode-spark-installed-' + [guid]::NewGuid().ToString('n'))
@@ -221,6 +229,37 @@ try
 finally
 {
     Remove-Item -LiteralPath $freshRoot -Recurse -Force -ErrorAction SilentlyContinue
+}
+
+$treeRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('opencode-spark-tree-' + [guid]::NewGuid().ToString('n'))
+$treeVersionDir = Join-Path (Join-Path $treeRoot 'opencode-cli') '1.19.3-x64'
+New-Item -ItemType Directory -Path $treeVersionDir -Force | Out-Null
+New-Item -ItemType File -Path (Join-Path $treeVersionDir 'opencode.exe') -Force | Out-Null
+$savedTreeLocal = $env:LOCALAPPDATA
+$env:LOCALAPPDATA = $treeRoot
+$script:OpenCodeSparkCachePath = Join-Path (Join-Path $treeRoot 'opencode-cli') 'release.json'
+try
+{
+    $pinSha = $script:OpenCodeSparkPinnedZipSha256
+    Assert-True (-not (Test-OpenCodeSparkInstalledRelease -Version '1.19.3' -Sha256 $pinSha)) 'installed tree without release.json does not match'
+    $treeRecord = @{
+        version    = '1.19.3'
+        uri        = $script:OpenCodeSparkPinnedZipUri
+        sha256     = $pinSha
+        fetched_at = [datetime]::UtcNow.AddHours(-25).ToString('o')
+    }
+    $treeEncoding = New-Object System.Text.UTF8Encoding $false
+    [System.IO.File]::WriteAllText($script:OpenCodeSparkCachePath, ($treeRecord | ConvertTo-Json -Compress), $treeEncoding)
+    Assert-True (Test-OpenCodeSparkInstalledRelease -Version '1.19.3' -Sha256 $pinSha) 'stale cache still matches the installed tree'
+    Assert-True (Test-OpenCodeSparkReleaseInstallable -Version '1.19.3' -Sha256 $pinSha) 'matching installed tree is not replaced'
+    Assert-True (-not (Test-OpenCodeSparkInstalledRelease -Version '1.19.3' -Sha256 ('B' * 64))) 'installed tree rejects a different digest'
+    Assert-True (-not (Test-OpenCodeSparkReleaseInstallable -Version '1.20.0' -Sha256 ('B' * 64))) 'unpinned digest is not installable'
+    Assert-True (Test-OpenCodeSparkReleaseInstallable -Version '1.20.0' -Sha256 $pinSha) 'pin digest remains the install authorization'
+}
+finally
+{
+    $env:LOCALAPPDATA = $savedTreeLocal
+    Remove-Item -LiteralPath $treeRoot -Recurse -Force -ErrorAction SilentlyContinue
 }
 
 Write-Output 'OpenCodeSpark tests passed'
