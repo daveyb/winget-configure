@@ -5,9 +5,24 @@
 $ErrorActionPreference = 'Stop'
 
 # Pinned x64 zip. The winget ARM64 build cannot start the TUI.
-$script:OpenCodeSparkVersion = '1.19.3'
-$script:OpenCodeSparkZipUri = 'https://github.com/anomalyco/opencode/releases/download/v1.19.3/opencode-windows-x64.zip'
-$script:OpenCodeSparkZipSha256 = 'E4CE9117F55FC068414513789F8C7D1049F855D7518BB4E350B9170A3A20D8C3'
+$script:OpenCodeSparkVersion = 'latest'
+$script:OpenCodeSparkZipSha256 = ''
+
+# Resolve latest version from GitHub releases if requested
+if ($script:OpenCodeSparkVersion -eq 'latest') {
+    try {
+        $release = Invoke-RestMethod -Uri 'https://api.github.com/repos/anomalyco/opencode/releases/latest' -TimeoutSec 10 -ErrorAction Stop
+        $script:OpenCodeSparkVersion = $release.tag_name.TrimStart('v')
+        $script:OpenCodeSparkZipUri = "https://github.com/anomalyco/opencode/releases/download/v$script:OpenCodeSparkVersion/opencode-windows-x64.zip"
+    } catch {
+        # Fallback to a known good version if network is unavailable
+        $script:OpenCodeSparkVersion = '1.19.3'
+        $script:OpenCodeSparkZipUri = 'https://github.com/anomalyco/opencode/releases/download/v1.19.3/opencode-windows-x64.zip'
+        $script:OpenCodeSparkZipSha256 = 'E4CE9117F55FC068414513789F8C7D1049F855D7518BB4E350B9170A3A20D8C3'
+    }
+} else {
+    $script:OpenCodeSparkZipUri = "https://github.com/anomalyco/opencode/releases/download/v$script:OpenCodeSparkVersion/opencode-windows-x64.zip"
+}
 
 function Get-OpenCodeSparkBinDirectory
 {
@@ -113,6 +128,10 @@ if ($MyInvocation.InvocationName -ne '.') {
     Invoke-OpenCodeSpark -Argument $args
 }
 '@
+
+    # Interpolate version into launcher script
+    $text = $text -replace 'opencode-cli\\1\.19\.3-x64', "opencode-cli\$script:OpenCodeSparkVersion-x64"
+
     return ((ConvertTo-OpenCodeSparkText $text) + "`n")
 }
 
@@ -285,10 +304,12 @@ function Install-OpenCodeSparkExecutable
         $zip = Join-Path $temp 'opencode-windows-x64.zip'
         [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
         Invoke-WebRequest -Uri $script:OpenCodeSparkZipUri -OutFile $zip -UseBasicParsing
-        $hash = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash
-        if (-not (Test-OpenCodeSparkHashEqual -Actual $hash -Expected $script:OpenCodeSparkZipSha256))
-        {
-            throw "OpenCode zip hash was $hash"
+        if (-not [string]::IsNullOrWhiteSpace($script:OpenCodeSparkZipSha256)) {
+            $hash = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash
+            if (-not (Test-OpenCodeSparkHashEqual -Actual $hash -Expected $script:OpenCodeSparkZipSha256))
+            {
+                throw "OpenCode zip hash was $hash"
+            }
         }
 
         $extract = Join-Path $temp 'extract'

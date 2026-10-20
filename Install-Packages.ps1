@@ -577,7 +577,7 @@ if (-not $Thermonuclear)
     Write-Host ''
 }
 
-# Step 5: opencode-spark launcher, OpenCode 1.19.3 x64, and user Path.
+# Step 5: opencode-spark launcher, OpenCode x64, and user Path.
 # Same desired state as the OpenCode.Spark DSC resource, which dependsOn
 # Microsoft.PowerShell and Proton.ProtonPass.CLI when those packages are present.
 # Skip the step unless both succeeded. A failure here must not abort

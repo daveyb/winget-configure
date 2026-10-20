@@ -58,12 +58,12 @@ finally
     Remove-Item -LiteralPath $launcherPath -Force -ErrorAction SilentlyContinue
 }
 
-$executableSuffix = 'opencode-cli\1.19.3-x64\opencode.exe'
-Assert-True ((Get-OpenCodeSparkExecutablePath).EndsWith($executableSuffix)) 'executable path uses the pinned folder'
+$executableSuffix = "opencode-cli\$script:OpenCodeSparkVersion-x64\opencode.exe"
+Assert-True ((Get-OpenCodeSparkExecutablePath).EndsWith($executableSuffix)) 'executable path uses the resolved folder'
 Assert-True ((Get-OpenCodeSparkLauncherText).Contains($executableSuffix)) 'launcher starts that same executable'
 Assert-True (Test-OpenCodeSparkHashEqual -Actual 'e4ce9117f55fc068414513789f8c7d1049f855d7518bb4e350b9170a3a20d8c3' -Expected 'E4CE9117F55FC068414513789F8C7D1049F855D7518BB4E350B9170A3A20D8C3') 'zip hash compare ignores case'
 Assert-True (-not (Test-OpenCodeSparkHashEqual -Actual '0000000000000000000000000000000000000000000000000000000000000000' -Expected 'E4CE9117F55FC068414513789F8C7D1049F855D7518BB4E350B9170A3A20D8C3')) 'zip hash compare rejects a different hash'
-Assert-True (Test-OpenCodeSparkVersionOutput "1.19.3`r`n") 'version output accepts 1.19.3'
+Assert-True (Test-OpenCodeSparkVersionOutput "$script:OpenCodeSparkVersion`r`n") 'version output accepts resolved version'
 Assert-True (-not (Test-OpenCodeSparkVersionOutput '1.19.1')) 'version output rejects 1.19.1'
 
 Set-StrictMode -Version Latest
