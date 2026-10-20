@@ -333,6 +333,7 @@ $helperPath = Join-Path $PSScriptRoot 'helpers\Ensure-Winget.psm1'
 $wslHelperPath = Join-Path $PSScriptRoot 'helpers\Update-Wsl.psm1'
 $lockHelperPath = Join-Path $PSScriptRoot 'helpers\LockScreenPlayback.psm1'
 $shellHelperPath = Join-Path $PSScriptRoot 'helpers\ShellProfile.psm1'
+$openCodeSparkHelperPath = Join-Path $PSScriptRoot 'helpers\OpenCodeSpark.psm1'
 
 if (-not (Test-Path $helperPath))
 {
@@ -353,6 +354,10 @@ if (Test-Path -LiteralPath $lockHelperPath)
 if (Test-Path -LiteralPath $shellHelperPath)
 {
     Import-Module $shellHelperPath -Force
+}
+if (Test-Path -LiteralPath $openCodeSparkHelperPath)
+{
+    Import-Module $openCodeSparkHelperPath -Force
 }
 
 # Step 1: Build the package list ──────────────────────────────────────────────
@@ -572,7 +577,59 @@ if (-not $Thermonuclear)
     Write-Host ''
 }
 
-# Step 5: Summary ──────────────────────────────────────────────────────────────
+# Step 5: opencode-spark launcher, OpenCode 1.19.3 x64, and user Path.
+# Same desired state as the OpenCode.Spark DSC resource, which dependsOn
+# Microsoft.PowerShell and Proton.ProtonPass.CLI when those packages are present.
+# Skip the step unless both succeeded. A failure here must not abort
+# the package run.
+if (-not $Thermonuclear)
+{
+    $openCodePackageIds = @(
+        'Microsoft.PowerShell',
+        'Proton.ProtonPass.CLI'
+    )
+    $missingOpenCodePackages = @()
+    foreach ($openCodePackageId in $openCodePackageIds)
+    {
+        $openCodeResult = @($results | Where-Object { $_.PackageId -eq $openCodePackageId -and $_.Success })
+        if ($openCodeResult.Count -eq 0)
+        {
+            $missingOpenCodePackages += $openCodePackageId
+        }
+    }
+
+    if ($missingOpenCodePackages.Count -gt 0)
+    {
+        Write-Warning ("opencode-spark was not applied. These packages must succeed first: {0}. Package installation will continue." -f ($missingOpenCodePackages -join ', '))
+    }
+    elseif (-not (Get-Command -Name Set-OpenCodeSpark -ErrorAction SilentlyContinue))
+    {
+        Write-Warning "opencode-spark module not found at: $openCodeSparkHelperPath. Package installation will continue."
+    }
+    else
+    {
+        try
+        {
+            Write-ProgressInfo 'Configuring opencode-spark...' -Quiet:$Quiet
+            Set-OpenCodeSpark
+            if (Test-OpenCodeSpark)
+            {
+                Write-ProgressSuccess 'opencode-spark is configured' -Quiet:$Quiet
+            }
+            else
+            {
+                Write-Warning 'opencode-spark was not applied. Package installation will continue.'
+            }
+        }
+        catch
+        {
+            Write-Warning "opencode-spark was not applied. Package installation will continue. $($_.Exception.Message)"
+        }
+    }
+    Write-Host ''
+}
+
+# Step 6: Summary ──────────────────────────────────────────────────────────────
 Write-Host ''
 Write-Host "=== $(if ($Thermonuclear) { 'Uninstallation' } else { 'Installation' }) Summary ===" -ForegroundColor Cyan
 Write-Host "Total packages processed : $($packageEntries.Count)" -ForegroundColor White

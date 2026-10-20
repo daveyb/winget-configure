@@ -133,6 +133,20 @@ PowerShell is the profile named `PowerShell` from `Windows.Terminal.PowershellCo
 
 `Install-Packages.ps1` runs these steps after the package loop, and only if `Microsoft.PowerShell`, `Microsoft.WindowsTerminal`, and `JanDeDobbeleer.OhMyPosh` succeeded. If the step fails, the script warns and package installation still finishes. Open a new Windows Terminal tab to see the prompt and the font.
 
+## OpenCode spark
+
+`opencode-spark` starts OpenCode with the DGX Spark LiteLLM key in the environment. The command reads the key from Proton Pass when it starts and removes the key when OpenCode exits. The key is not written to disk.
+
+Run `opencode-spark` with no extra flags. That opens the TUI and passes `--auto`. `opencode-spark run` passes `--auto` after `run`. Permissions that are not explicitly denied are approved. Pass `--no-auto` to confirm those prompts again. Other OpenCode subcommands are unchanged. Those commands reject `--auto`.
+
+```powershell
+opencode-spark
+```
+
+`OpenCode.Spark` writes `opencode-spark.ps1` and `opencode-spark.cmd` to `~\.local\bin` and adds that directory to the user Path. It downloads OpenCode `1.19.3` for Windows x64 from the pinned GitHub release, checks the SHA-256, and extracts `opencode.exe` to `%LOCALAPPDATA%\opencode-cli\1.19.3-x64\opencode.exe`. The winget package is not used. That package's ARM64 build cannot start the TUI. The resource waits for `Microsoft.PowerShell` and `Proton.ProtonPass.CLI`. Both packages are already in `winget-packages.yml`.
+
+`Install-Packages.ps1` runs the same step after the shell profile, and only if those two packages succeeded. If the step fails, the script warns and package installation still finishes.
+
 ## Editing the Package List
 
 Open `winget-packages.yml` and add, remove, or reorganise entries under any category:
@@ -194,6 +208,7 @@ This means you never need to hand‑edit the DSC file — just add or remove lin
 | `helpers\Update-Wsl.psm1` | Helper module to update WSL via web-download and pin `Microsoft.WSL`. |
 | `helpers\LockScreenPlayback.ps1` | Desired state for Chrome lock-screen playback and the 30-second console lock display timeout. |
 | `helpers\ShellProfile.ps1` | Desired state for the PowerShell 7 profile, Terminal-Icons, Departure Mono, and the Windows Terminal profile list. |
+| `helpers\OpenCodeSpark.ps1` | Desired state for the opencode-spark launcher, the command shim, and the user Path entry. |
 
 ## Prerequisites
 
