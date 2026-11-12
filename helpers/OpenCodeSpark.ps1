@@ -480,6 +480,215 @@ function Get-OpenCodeSparkArgument {
     return (@('--auto') + $given)
 }
 
+function Get-OpenCodeSparkModelChoice {
+    param([string[]]$Argument)
+
+    $given = @($Argument | Where-Object { $null -ne $_ -and $_ -ne '' })
+    for ($i = 0; $i -lt $given.Count; $i++) {
+        $item = [string]$given[$i]
+        if (($item -eq '--model' -or $item -eq '-m') -and ($i + 1) -lt $given.Count) {
+            return [string]$given[$i + 1]
+        }
+
+        if ($item.StartsWith('--model=')) {
+            return $item.Substring(8)
+        }
+    }
+
+    return $null
+}
+
+function Get-OpenCodeSparkStatusText {
+    param(
+        [string]$ConfigPath,
+        [string]$ModelArgument,
+        [string]$HonchoUrl,
+        [string]$Workspace
+    )
+
+    $model = [string]$ModelArgument
+    $node = 'unknown'
+    if ([string]::IsNullOrWhiteSpace($model)) {
+        $model = 'unknown'
+    }
+
+    if (Test-Path -LiteralPath $ConfigPath) {
+        try {
+            $cfg = [System.IO.File]::ReadAllText($ConfigPath) | ConvertFrom-Json
+            if ([string]::IsNullOrWhiteSpace($ModelArgument)) {
+                $configured = [string]$cfg.model
+                if (-not [string]::IsNullOrWhiteSpace($configured)) {
+                    $model = $configured
+                }
+            }
+
+            $slash = $model.IndexOf('/')
+            if ($slash -gt 0 -and $null -ne $cfg.provider) {
+                $providerName = $model.Substring(0, $slash)
+                $provider = $cfg.provider.$providerName
+                $base = [string]$provider.options.baseURL
+                if (-not [string]::IsNullOrWhiteSpace($base)) {
+                    $node = $base
+                }
+            }
+        }
+        catch {
+            $node = 'unknown'
+        }
+    }
+
+    return @(
+        ('Spark node  ' + $node)
+        ('Model       ' + $model)
+        ('Honcho      ' + $HonchoUrl + '  workspace ' + $Workspace)
+    )
+}
+
+function Get-OpenCodeSparkHonchoWorkspace {
+    $name = [string]$env:COMPUTERNAME
+    if ([string]::IsNullOrWhiteSpace($name)) {
+        $name = 'host'
+    }
+
+    $safe = $name.ToLowerInvariant() -replace '[^a-z0-9_-]', '-'
+    $safe = $safe.Trim('-')
+    if ([string]::IsNullOrWhiteSpace($safe)) {
+        $safe = 'host'
+    }
+
+    return ('opencode-spark-' + $safe)
+}
+
+function Resolve-OpenCodeSparkHonchoBaseUrl {
+    param([string]$BackendState)
+
+    # MagicDNS answers edge001 only while this host's tailnet is up.
+    if ($BackendState -eq 'Running') {
+        return 'http://edge001:8000'
+    }
+
+    return 'http://192.168.5.201:8000'
+}
+
+function Get-OpenCodeSparkTailnetState {
+    $cmd = Get-Command tailscale -ErrorAction SilentlyContinue
+    if (-not $cmd) {
+        return 'Missing'
+    }
+
+    try {
+        $raw = (& $cmd.Source status --json 2>$null | Out-String)
+        if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($raw)) {
+            return 'Stopped'
+        }
+
+        $parsed = $raw | ConvertFrom-Json
+        $state = [string]$parsed.BackendState
+        if ([string]::IsNullOrWhiteSpace($state)) {
+            return 'Stopped'
+        }
+
+        return $state
+    }
+    catch {
+        return 'Stopped'
+    }
+}
+
+function Update-OpenCodeSparkHonchoConfig {
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [Parameter(Mandatory)][string]$BaseUrl,
+        [Parameter(Mandatory)][string]$Workspace
+    )
+
+    $root = $null
+    if (Test-Path -LiteralPath $Path -PathType Leaf) {
+        $raw = [System.IO.File]::ReadAllText($Path)
+        if (-not [string]::IsNullOrWhiteSpace($raw)) {
+            $root = $raw | ConvertFrom-Json -AsHashtable
+        }
+    }
+
+    if ($null -eq $root) {
+        $root = @{}
+    }
+
+    $changed = $false
+    if ([string]$root['baseUrl'] -ne $BaseUrl) {
+        $root['baseUrl'] = $BaseUrl
+        $changed = $true
+    }
+
+    if ([string]::IsNullOrWhiteSpace([string]$root['peerName'])) {
+        $peer = [string]$env:USERNAME
+        if ([string]::IsNullOrWhiteSpace($peer)) {
+            $peer = 'david'
+        }
+
+        $root['peerName'] = $peer
+        $changed = $true
+    }
+
+    if ($root['hosts'] -isnot [System.Collections.IDictionary]) {
+        $root['hosts'] = @{}
+        $changed = $true
+    }
+
+    $hosts = $root['hosts']
+    if ($hosts['opencode'] -isnot [System.Collections.IDictionary]) {
+        $hosts['opencode'] = @{}
+        $changed = $true
+    }
+
+    $opencode = $hosts['opencode']
+    if ([string]$opencode['workspace'] -ne $Workspace) {
+        $opencode['workspace'] = $Workspace
+        $changed = $true
+    }
+
+    if ([string]::IsNullOrWhiteSpace([string]$opencode['aiPeer'])) {
+        $opencode['aiPeer'] = 'opencode'
+        $changed = $true
+    }
+
+    if ([string]::IsNullOrWhiteSpace([string]$opencode['recallMode'])) {
+        $opencode['recallMode'] = 'hybrid'
+        $changed = $true
+    }
+
+    if ([string]::IsNullOrWhiteSpace([string]$opencode['sessionStrategy'])) {
+        $opencode['sessionStrategy'] = 'per-directory'
+        $changed = $true
+    }
+
+    if (-not $opencode.Contains('removeUserPrefix')) {
+        $opencode['removeUserPrefix'] = $true
+        $changed = $true
+    }
+
+    if ([string]::IsNullOrWhiteSpace([string]$opencode['observationMode'])) {
+        $opencode['observationMode'] = 'unified'
+        $changed = $true
+    }
+
+    if (-not $changed) {
+        return $false
+    }
+
+    $directory = Split-Path -Parent $Path
+    if (-not (Test-Path -LiteralPath $directory)) {
+        New-Item -ItemType Directory -Path $directory -Force | Out-Null
+    }
+
+    $json = ($root | ConvertTo-Json -Depth 20) + "`n"
+    $encoding = New-Object System.Text.UTF8Encoding $false
+    $temp = $Path + '.tmp'
+    [System.IO.File]::WriteAllText($temp, $json, $encoding)
+    Move-Item -LiteralPath $temp -Destination $Path -Force
+    return $true
+}
+
 function Invoke-OpenCodeSpark {
     param([string[]]$Argument)
 
@@ -498,20 +707,36 @@ function Invoke-OpenCodeSpark {
         throw 'opencode x64 build is not installed'
     }
 
+    $honchoUrl = Resolve-OpenCodeSparkHonchoBaseUrl -BackendState (Get-OpenCodeSparkTailnetState)
+    $honchoWorkspace = Get-OpenCodeSparkHonchoWorkspace
+    $honchoConfig = Join-Path $env:USERPROFILE '.honcho\config.json'
+    # The bool is true only when the file changes. An uncaptured false prints "False".
+    $null = Update-OpenCodeSparkHonchoConfig -Path $honchoConfig -BaseUrl $honchoUrl -Workspace $honchoWorkspace
+    $statusConfig = Join-Path $env:USERPROFILE '.config\opencode\opencode.json'
+    $statusModel = Get-OpenCodeSparkModelChoice -Argument $Argument
+    foreach ($line in @(Get-OpenCodeSparkStatusText -ConfigPath $statusConfig -ModelArgument $statusModel -HonchoUrl $honchoUrl -Workspace $honchoWorkspace)) {
+        Write-Host $line
+    }
+    # The plugin reads these over the shared file, and only for this process.
+    $env:HONCHO_BASE_URL = $honchoUrl
+    $env:HONCHO_WORKSPACE = $honchoWorkspace
+
     # pass-cli run pipes the child. OpenCode's TUI then waits on that pipe and never draws.
     # Read the key and start OpenCode on this console instead.
-    $secret = (& $pass item view --vault-name DGXSpark --item-title LITELLM_MASTER_KEY --field secret | Out-String).Trim()
-    if ($LASTEXITCODE -ne 0 -or $secret.Length -lt 20 -or $secret.StartsWith('pass://') -or $secret.StartsWith('Error')) {
-        throw 'pass-cli could not read the LiteLLM master key'
-    }
-    $env:LITELLM_MASTER_KEY = $secret
     try {
+        $secret = (& $pass item view --vault-name DGXSpark --item-title LITELLM_MASTER_KEY --field secret | Out-String).Trim()
+        if ($LASTEXITCODE -ne 0 -or $secret.Length -lt 20 -or $secret.StartsWith('pass://') -or $secret.StartsWith('Error')) {
+            throw 'pass-cli could not read the LiteLLM master key'
+        }
+        $env:LITELLM_MASTER_KEY = $secret
         $launch = @(Get-OpenCodeSparkArgument -Argument $Argument)
         & $opencode @launch
         exit $LASTEXITCODE
     }
     finally {
         Remove-Item Env:\LITELLM_MASTER_KEY -ErrorAction SilentlyContinue
+        Remove-Item Env:\HONCHO_BASE_URL -ErrorAction SilentlyContinue
+        Remove-Item Env:\HONCHO_WORKSPACE -ErrorAction SilentlyContinue
         Remove-Variable secret -ErrorAction SilentlyContinue
     }
 }
