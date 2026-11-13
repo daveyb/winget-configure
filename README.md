@@ -139,6 +139,10 @@ PowerShell is the profile named `PowerShell` from `Windows.Terminal.PowershellCo
 
 Run `opencode-spark` with no extra flags. That opens the TUI and passes `--auto`. `opencode-spark run` passes `--auto` after `run`. Permissions that are not explicitly denied are approved. Pass `--no-auto` to confirm those prompts again. Other OpenCode subcommands are unchanged. Those commands reject `--auto`.
 
+Each start also selects the lab Honcho address. Tailscale backend `Running` uses `http://edge001:8000`. Any other state uses `http://192.168.5.201:8000`. The address is written to `~\.honcho\config.json` as `baseUrl` and exported to that process as `HONCHO_BASE_URL`. The OpenCode workspace is `opencode-spark-` plus the computer name in lower case. A second start with the same address and workspace does not rewrite the file. Keys already in the file, including other hosts, stay.
+
+Before OpenCode starts, the command prints three lines. The Spark node is the base URL of the provider in the selected model. The model comes from `~\.config\opencode\opencode.json`, unless `-m`, `--model`, or `--model=` was passed. The Honcho line is the address chosen for this start and the workspace name. A file that is already current does not print `False`.
+
 ```powershell
 opencode-spark
 ```
