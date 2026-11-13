@@ -24,6 +24,7 @@ packages:
     - ZedIndustries.Zed # Zed code editor
     - Microsoft.PowerShell # PowerShell 7+
     - Microsoft.WindowsTerminal # Windows Terminal
+    - 9NMQC2SSJX24 source: msstore # Intelligent Terminal (Microsoft Store)
     - JanDeDobbeleer.OhMyPosh # Oh My Posh prompt theme engine
     - OpenJS.NodeJS
     - Anthropic.ClaudeCode
