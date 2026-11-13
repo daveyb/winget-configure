@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.0] - 2026-10-31
+
+### Added
+- `opencode-spark` points Honcho at `http://edge001:8000` while Tailscale's backend is Running, and at `http://192.168.5.201:8000` otherwise. The choice is written to `~/.honcho/config.json` and passed to that process as `HONCHO_BASE_URL`.
+- The OpenCode host block uses workspace `opencode-spark-<computername>`. On this machine that is `opencode-spark-ddbx1e`. Other keys already in the Honcho file are left in place.
+- Startup prints the Spark node base URL, the model, and the Honcho host before OpenCode starts.
+
+### Fixed
+- The Honcho file update no longer prints `False` when the address and workspace are already current.
+
 ## [1.4.1] - 2026-10-20
 
 ### Fixed

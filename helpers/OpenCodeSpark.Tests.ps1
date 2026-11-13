@@ -52,6 +52,46 @@ try
     Assert-Equal (Format-OpenCodeSparkLaunch -Argument @('--auto', 'run')) '--auto|run' 'existing auto is kept'
     Assert-Equal (Format-OpenCodeSparkLaunch -Argument @('run', '--no-auto')) 'run|--no-auto' 'no-auto is kept'
     Assert-Equal (Format-OpenCodeSparkLaunch -Argument @('--no-auto')) '--no-auto' 'no-auto alone is kept'
+
+    Assert-Equal (Resolve-OpenCodeSparkHonchoBaseUrl -BackendState 'Running') 'http://edge001:8000' 'running tailnet uses edge001'
+    Assert-Equal (Resolve-OpenCodeSparkHonchoBaseUrl -BackendState 'Stopped') 'http://192.168.5.201:8000' 'stopped tailnet uses the lab LAN'
+    Assert-Equal (Resolve-OpenCodeSparkHonchoBaseUrl -BackendState 'Missing') 'http://192.168.5.201:8000' 'missing tailscale uses the lab LAN'
+
+    $savedComputer = $env:COMPUTERNAME
+    $savedUser = $env:USERNAME
+    try {
+        $env:COMPUTERNAME = 'DDBX1E'
+        Assert-Equal (Get-OpenCodeSparkHonchoWorkspace) 'opencode-spark-ddbx1e' 'workspace names this host'
+        $env:COMPUTERNAME = 'Weird Host!'
+        Assert-Equal (Get-OpenCodeSparkHonchoWorkspace) 'opencode-spark-weird-host' 'workspace keeps letters digits and hyphens'
+
+        $env:USERNAME = 'david'
+        $honchoPath = Join-Path ([System.IO.Path]::GetTempPath()) ('honcho-' + [guid]::NewGuid().ToString('n') + '.json')
+        $seed = '{"baseUrl":"https://api.honcho.dev","note":"keep","hosts":{"claude":{"workspace":"other"}}}'
+        [System.IO.File]::WriteAllText($honchoPath, $seed)
+        Assert-True (Update-OpenCodeSparkHonchoConfig -Path $honchoPath -BaseUrl 'http://edge001:8000' -Workspace 'opencode-spark-ddbx1e') 'first honcho write changes the file'
+        $written = [System.IO.File]::ReadAllText($honchoPath) | ConvertFrom-Json
+        Assert-Equal $written.baseUrl 'http://edge001:8000' 'honcho base url is the tailnet address'
+        Assert-Equal $written.note 'keep' 'unrelated honcho keys stay'
+        Assert-Equal $written.hosts.claude.workspace 'other' 'other host workspaces stay'
+        Assert-Equal $written.hosts.opencode.workspace 'opencode-spark-ddbx1e' 'opencode workspace is unique to this host'
+        Assert-Equal $written.peerName 'david' 'missing peer name uses the account'
+        Assert-Equal $written.hosts.opencode.observationMode 'unified' 'new opencode host uses unified observation'
+        Assert-True ($written.hosts.opencode.removeUserPrefix -eq $true) 'new opencode host uses the bare peer name'
+        Assert-True (-not (Update-OpenCodeSparkHonchoConfig -Path $honchoPath -BaseUrl 'http://edge001:8000' -Workspace 'opencode-spark-ddbx1e')) 'second honcho write finds nothing to change'
+        Assert-True (Update-OpenCodeSparkHonchoConfig -Path $honchoPath -BaseUrl 'http://192.168.5.201:8000' -Workspace 'opencode-spark-ddbx1e') 'lan url is written when the tailnet is down'
+        $lan = [System.IO.File]::ReadAllText($honchoPath) | ConvertFrom-Json
+        Assert-Equal $lan.baseUrl 'http://192.168.5.201:8000' 'honcho base url follows the lab LAN'
+        Assert-Equal $lan.hosts.opencode.workspace 'opencode-spark-ddbx1e' 'workspace stays put when the url changes'
+    }
+    finally {
+        $env:COMPUTERNAME = $savedComputer
+        $env:USERNAME = $savedUser
+        if ($honchoPath) {
+            Remove-Item -LiteralPath $honchoPath -Force -ErrorAction SilentlyContinue
+            Remove-Item -LiteralPath ($honchoPath + '.tmp') -Force -ErrorAction SilentlyContinue
+        }
+    }
 }
 finally
 {
@@ -67,6 +107,29 @@ $launcherText = Get-OpenCodeSparkLauncherText
 $versionFolder = 'opencode-cli\' + $script:OpenCodeSparkVersion + '-x64\opencode.exe'
 Assert-True ($launcherText.Contains('Join-Path $env:LOCALAPPDATA')) 'launcher resolves the runtime profile'
 Assert-True ($launcherText.Contains($versionFolder)) 'launcher names the pinned version folder'
+Assert-True ($launcherText.Contains('http://edge001:8000')) 'launcher names the tailnet honcho address'
+Assert-True ($launcherText.Contains('http://192.168.5.201:8000')) 'launcher names the lab LAN honcho address'
+Assert-True ($launcherText.Contains('HONCHO_BASE_URL')) 'launcher passes the chosen honcho address to this process'
+Assert-True ($launcherText.Contains('HONCHO_WORKSPACE')) 'launcher passes the host workspace to this process'
+Assert-True ($launcherText.Contains('$null = Update-OpenCodeSparkHonchoConfig')) 'honcho update result is not printed'
+Assert-True ($launcherText.Contains('Write-Host $line')) 'startup details go to the console'
+$statusPath = Join-Path ([System.IO.Path]::GetTempPath()) ('opencode-status-' + [guid]::NewGuid().ToString('n') + '.json')
+$statusJson = '{"model":"spark-tailnet/muse-glimmer","provider":{"spark-tailnet":{"options":{"baseURL":"http://100.87.165.22:4000/v1"}},"spark-lan":{"options":{"baseURL":"http://192.168.4.29:4000/v1"}}}}'
+[System.IO.File]::WriteAllText($statusPath, $statusJson)
+try {
+    $fromConfig = @(Get-OpenCodeSparkStatusText -ConfigPath $statusPath -ModelArgument $null -HonchoUrl 'http://edge001:8000' -Workspace 'opencode-spark-ddbx1e')
+    Assert-Equal ($fromConfig -join '|') 'Spark node  http://100.87.165.22:4000/v1|Model       spark-tailnet/muse-glimmer|Honcho      http://edge001:8000  workspace opencode-spark-ddbx1e' 'status uses the configured spark node'
+    $fromFlag = @(Get-OpenCodeSparkStatusText -ConfigPath $statusPath -ModelArgument 'spark-lan/muse-glimmer' -HonchoUrl 'http://192.168.5.201:8000' -Workspace 'opencode-spark-ddbx1e')
+    Assert-Equal ($fromFlag -join '|') 'Spark node  http://192.168.4.29:4000/v1|Model       spark-lan/muse-glimmer|Honcho      http://192.168.5.201:8000  workspace opencode-spark-ddbx1e' 'status follows an explicit model'
+    Assert-Equal (Get-OpenCodeSparkModelChoice -Argument @('-m', 'spark-lan/muse-glimmer')) 'spark-lan/muse-glimmer' 'short model flag is read'
+    Assert-Equal (Get-OpenCodeSparkModelChoice -Argument @('--model=spark-lan/muse-glimmer')) 'spark-lan/muse-glimmer' 'model equals flag is read'
+    $missing = @(Get-OpenCodeSparkStatusText -ConfigPath ($statusPath + '.missing') -ModelArgument $null -HonchoUrl 'http://edge001:8000' -Workspace 'opencode-spark-ddbx1e')
+    Assert-Equal $missing[0] 'Spark node  unknown' 'missing config leaves the node unknown'
+    Assert-Equal $missing[1] 'Model       unknown' 'missing config leaves the model unknown'
+}
+finally {
+    Remove-Item -LiteralPath $statusPath -Force -ErrorAction SilentlyContinue
+}
 Assert-True (-not $launcherText.Contains('__OPENCODE_SPARK_VERSION__')) 'launcher version placeholder is replaced'
 Assert-True (-not $launcherText.Contains('__OPENCODE_SPARK_EXECUTABLE__')) 'launcher path is not a leftover placeholder'
 if (-not [string]::IsNullOrWhiteSpace($env:LOCALAPPDATA))
