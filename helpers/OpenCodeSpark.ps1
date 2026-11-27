@@ -12,9 +12,9 @@ $ErrorActionPreference = 'Stop'
 # the installed tree. The GitHub API digest does not authorize a release that
 # is not this pin. Asset downloads are limited to GitHub hosts.
 # Do not call GitHub while this file is parsed, and do not call it from Get or Test.
-$script:OpenCodeSparkPinnedVersion = '1.19.3'
-$script:OpenCodeSparkPinnedZipUri = 'https://github.com/anomalyco/opencode/releases/download/v1.19.3/opencode-windows-x64.zip'
-$script:OpenCodeSparkPinnedZipSha256 = 'E4CE9117F55FC068414513789F8C7D1049F855D7518BB4E350B9170A3A20D8C3'
+$script:OpenCodeSparkPinnedVersion = '1.19.6'
+$script:OpenCodeSparkPinnedZipUri = 'https://github.com/anomalyco/opencode/releases/download/v1.19.6/opencode-windows-x64.zip'
+$script:OpenCodeSparkPinnedZipSha256 = 'FA31C9EC0BAC7611AB12699EF8E2FC4C173FB95AC977B09B189B255B8F559BCC'
 $script:OpenCodeSparkCacheTtlHours = 24
 $script:OpenCodeSparkVersion = $script:OpenCodeSparkPinnedVersion
 $script:OpenCodeSparkZipUri = $script:OpenCodeSparkPinnedZipUri
