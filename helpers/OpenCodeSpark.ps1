@@ -432,6 +432,7 @@ function Get-OpenCodeSparkLauncherText
 # Starts OpenCode with the DGX Spark LiteLLM key in the environment.
 # The key is read from Proton Pass and removed when OpenCode exits. It is not written to disk.
 $ErrorActionPreference = 'Stop'
+$script:OpenCodeSparkVersion = '__OPENCODE_SPARK_VERSION__'
 
 function Get-OpenCodeSparkArgument {
     param([string[]]$Argument)
