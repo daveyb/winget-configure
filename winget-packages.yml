@@ -54,6 +54,7 @@ packages:
     - Microsoft.PowerToys # Windows PowerToys
     - Microsoft.Sysinternals.Suite # Sysinternals Suite
     - Microsoft.Teams # Microsoft Teams
+    - XP9CXNGPPJ97XX source: msstore # Microsoft Copilot (Microsoft Store)
     - calibre.calibre # Calibre e-book manager
     - Tailscale.Tailscale # Tailscale VPN mesh
     - Proton.ProtonVPN # Proton VPN
