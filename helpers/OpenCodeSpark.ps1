@@ -541,6 +541,7 @@ function Get-OpenCodeSparkStatusText {
         ('Spark node  ' + $node)
         ('Model       ' + $model)
         ('Honcho      ' + $HonchoUrl + '  workspace ' + $Workspace)
+        ('OpenCode    ' + $script:OpenCodeSparkVersion)
     )
 }
 

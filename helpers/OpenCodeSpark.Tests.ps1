@@ -118,9 +118,9 @@ $statusJson = '{"model":"spark-tailnet/muse-glimmer","provider":{"spark-tailnet"
 [System.IO.File]::WriteAllText($statusPath, $statusJson)
 try {
     $fromConfig = @(Get-OpenCodeSparkStatusText -ConfigPath $statusPath -ModelArgument $null -HonchoUrl 'http://edge001:8000' -Workspace 'opencode-spark-ddbx1e')
-    Assert-Equal ($fromConfig -join '|') 'Spark node  http://100.87.165.22:4000/v1|Model       spark-tailnet/muse-glimmer|Honcho      http://edge001:8000  workspace opencode-spark-ddbx1e' 'status uses the configured spark node'
+    Assert-Equal ($fromConfig -join '|') 'Spark node  http://100.87.165.22:4000/v1|Model       spark-tailnet/muse-glimmer|Honcho      http://edge001:8000  workspace opencode-spark-ddbx1e|OpenCode    1.19.6' 'status uses the configured spark node'
     $fromFlag = @(Get-OpenCodeSparkStatusText -ConfigPath $statusPath -ModelArgument 'spark-lan/muse-glimmer' -HonchoUrl 'http://192.168.5.201:8000' -Workspace 'opencode-spark-ddbx1e')
-    Assert-Equal ($fromFlag -join '|') 'Spark node  http://192.168.4.29:4000/v1|Model       spark-lan/muse-glimmer|Honcho      http://192.168.5.201:8000  workspace opencode-spark-ddbx1e' 'status follows an explicit model'
+    Assert-Equal ($fromFlag -join '|') 'Spark node  http://192.168.4.29:4000/v1|Model       spark-lan/muse-glimmer|Honcho      http://192.168.5.201:8000  workspace opencode-spark-ddbx1e|OpenCode    1.19.6' 'status follows an explicit model'
     Assert-Equal (Get-OpenCodeSparkModelChoice -Argument @('-m', 'spark-lan/muse-glimmer')) 'spark-lan/muse-glimmer' 'short model flag is read'
     Assert-Equal (Get-OpenCodeSparkModelChoice -Argument @('--model=spark-lan/muse-glimmer')) 'spark-lan/muse-glimmer' 'model equals flag is read'
     $missing = @(Get-OpenCodeSparkStatusText -ConfigPath ($statusPath + '.missing') -ModelArgument $null -HonchoUrl 'http://edge001:8000' -Workspace 'opencode-spark-ddbx1e')
