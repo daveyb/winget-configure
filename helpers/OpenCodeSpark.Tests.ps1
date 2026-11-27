@@ -100,9 +100,10 @@ finally
 
 $script:OpenCodeSparkCachePath = Join-Path ([System.IO.Path]::GetTempPath()) ('opencode-spark-missing-' + [guid]::NewGuid().ToString('n') + '.json')
 $script:OpenCodeSparkDesiredReady = $false
+$path = Get-OpenCodeSparkExecutablePath
 $separator = [System.IO.Path]::DirectorySeparatorChar
 $executableSuffix = "opencode-cli$separator$script:OpenCodeSparkVersion-x64$separator" + 'opencode.exe'
-Assert-True ((Get-OpenCodeSparkExecutablePath).EndsWith($executableSuffix)) 'executable path uses the cached or pinned folder'
+Assert-True ($path.EndsWith($executableSuffix)) 'executable path uses the cached or pinned folder'
 $launcherText = Get-OpenCodeSparkLauncherText
 $versionFolder = 'opencode-cli\' + $script:OpenCodeSparkVersion + '-x64\opencode.exe'
 Assert-True ($launcherText.Contains('Join-Path $env:LOCALAPPDATA')) 'launcher resolves the runtime profile'
