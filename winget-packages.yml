@@ -20,8 +20,8 @@ packages:
     - GitHub.Copilot # GitHub Copilot CLI extension
     - GitHub.CopilotApp
     - GoLang.Go # Go programming language
-    - Python.Python.3.14 # Python 3.14
-    - ZedIndustries.Zed # Zed code editor
+    - Python.Python.3.15 # Python 3.15
+    - Microsoft.VisualStudioCode # Visual Studio Code
     - Microsoft.PowerShell # PowerShell 7+
     - Microsoft.WindowsTerminal # Windows Terminal
     - 9NMQC2SSJX24 source: msstore # Intelligent Terminal (Microsoft Store)
@@ -32,7 +32,6 @@ packages:
     - xAI.GrokBuild # Grok Build CLI agent
     - 9PMXK8CZC7KR source: msstore # Hermes Desktop (Microsoft Store, Nous Research)
     - Herdr.Herdr.Preview # herdr agent runtime (preview)
-    - Google.AndroidStudio
     - Hashicorp.TerraformLanguageServer
 
   # ── Cloud & infrastructure ────────────────────────────────────────────────────
@@ -55,7 +54,6 @@ packages:
     - Microsoft.PowerToys # Windows PowerToys
     - Microsoft.Sysinternals.Suite # Sysinternals Suite
     - Microsoft.Teams # Microsoft Teams
-    - Microsoft.Office # Microsoft 365 / Office
     - calibre.calibre # Calibre e-book manager
     - Tailscale.Tailscale # Tailscale VPN mesh
     - Proton.ProtonVPN # Proton VPN
@@ -70,7 +68,7 @@ packages:
     - GuinpinSoft.MakeMKV # MakeMKV disc ripper
     - Gyan.FFmpeg # FFmpeg multimedia framework
     - Valve.Steam # Steam gaming platform
-    - GOG.Galaxy
+    - 9MV0B5HZVK9Z source: msstore # Xbox app (Microsoft Store)
     - martinrotter.RSSGuard5
     - MoonlightGameStreamingProject.Moonlight # Moonlight game streaming client
 
@@ -80,7 +78,6 @@ packages:
 
   # ── Browsers ──────────────────────────────────────────────────────────────────
   browsers:
-    - Mozilla.Firefox
     - Google.Chrome
 
   # ── Communication ─────────────────────────────────────────────────────────────

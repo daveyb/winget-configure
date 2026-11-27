@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.2] - 2026-11-27
+
+### Changed
+- OpenCode Spark pinned release updated to 1.19.6.
+- OpenCode Spark status output now includes the OpenCode version number.
+
+### Added
+- `Microsoft.VisualStudioCode` added to development category.
+- `9MV0B5HZVK9Z source: msstore` # Xbox app (Microsoft Store) added to media & entertainment category.
+
+### Removed
+- `ZedIndustries.Zed` removed from development category.
+- `Google.AndroidStudio` removed from development category.
+- `Microsoft.Office` removed from productivity category.
+- `Mozilla.Firefox` removed from browsers category.
+- `GOG.Galaxy` removed from media & entertainment category.
+
+### Updated
+- `Python.Python.3.14` → `Python.Python.3.15` in development category.
+
 ## [1.5.1] - 2026-11-12
 
 ### Added
