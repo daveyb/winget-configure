@@ -11,6 +11,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - OpenCode Spark pinned release updated to 1.19.6.
 - OpenCode Spark status output now includes the OpenCode version number.
 
+### Fixed
+- Launcher script now defines `$script:OpenCodeSparkVersion` so `opencode-spark` startup status prints the version.
+
 ### Added
 - `Microsoft.VisualStudioCode` added to development category.
 - `9MV0B5HZVK9Z source: msstore` # Xbox app (Microsoft Store) added to media & entertainment category.
